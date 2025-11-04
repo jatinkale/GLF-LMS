@@ -1,0 +1,20 @@
+Create LMS User using the Employee Details records
+
+Maintain LMS user logins in a separate table.
+
+Add a column to the employee details db that marks weather "LMS User Created" for every employee. Set it to No for everybody.
+
+On the employee details grid: provide checkbox as the first column with a select all at the top.
+Create a button at the top of the grid "Create/Update LMS Logins"
+
+After a user selects one or more records and clicks the Create/Update button use the following logic:
+
+1. The user logins should be created using the email ID
+2. If the email ID as a login already exists - then only update the login record with the latest details: activate or deactivate the login based on the latest value AND update the access level to Employee or Manager based on the latest record.
+3. If the email ID does not already have a login ID created - then add a new record with email ID as the Login ID and default password as "Password-123"
+4. Update the LMS User Created flag in the employee details table to "Yes" in the db.
+5. Always capture the timestamp when the record was created or updated.
+
+Wire all the services and authentication such that the application will start accepting these users for logging in with appropriate access levels - Employee or Manager.
+
+Start showing the LMS User Created - Yes/No on the Employee Details grid as well as on the "View Details" popup screen.

@@ -1,0 +1,21 @@
+"LMS User Management" Feature
+
+Use the User Login table in the db or create new, do not mix LMS user mgmt details with employee details.
+
+In the Actions column on the Employee Management screen grid, add 2 types of "Edit" icons
+
+1. Existing "Edit Employee Details" icon/button
+2. New "Edit LMS User" icon/button
+
+On clicking this new button:
+- Open a new modal popup "LMS User Management" with these details: User Name (non editable), Login ID (non editable), User Access (Emp or Mgr) (editable), User Enabled or disabled (only value, not editable)
+- Give 3 buttons at the bottom: "Reset Password", "Disable User" (If the user is already enabled) OR "Enable User" (If the user is already disabled), "Delete User"
+- "Reset Password" button should be in plain blue color shade
+- "Disable User" button should be Orange, "Enable User" button should be Green. Plain colors no gradient. Button text white.
+- "Delete User" button should be Red. Plain colours no gradient. Button text white.
+- Create the button actions appropriately
+- All the actions should ask for user confirmation
+- Reset Password should reset the concerned user password to "Password-123"
+- Deleting the user from LMS User Login should reset the LMS User created flag on the employee details screen to "No"
+- Marking the user inactive on employee details should automatically "Disable" the LMS User login.
+- "Enable User" on LMS User Mgmt should only enable when the user is "Active" on the Employee Details.

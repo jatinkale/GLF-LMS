@@ -1,0 +1,585 @@
+// Prisma Schema for Leave Management System
+// Database: MySQL 8.0+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Role {
+  ADMIN
+  HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum LeaveStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LeaveCategory {
+  CASUAL
+  SICK
+  PRIVILEGE
+  MATERNITY
+  PATERNITY
+  LWP
+  COMP_OFF
+  PTO
+  SPECIAL
+}
+
+enum Region {
+  IND
+  US
+}
+
+enum AccrualFrequency {
+  MONTHLY
+  YEARLY
+  QUARTERLY
+  NONE
+}
+
+enum NotificationType {
+  LEAVE_REQUEST
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+  LEAVE_CANCELLED
+  LEAVE_MODIFIED
+  COMP_OFF_REQUEST
+  COMP_OFF_APPROVED
+  COMP_OFF_REJECTED
+  ACCRUAL_CREDIT
+  BALANCE_LOW
+  DELEGATION_ASSIGNED
+  DELEGATION_REMOVED
+  APPROVAL_REMINDER
+  SYSTEM
+}
+
+enum CompOffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  AVAILED
+  EXPIRED
+}
+
+enum LMSAccess {
+  EMP
+  MGR
+}
+
+enum EmployeeType {
+  FTE
+  FTDC
+  CONSULTANT
+}
+
+enum LeaveTypeRegion {
+  ALL
+  IND
+  US
+}
+
+// Models
+
+model User {
+  employeeId           String       @id
+  email                String       @unique
+  password             String
+  firstName            String
+  lastName             String
+  role                 Role         @default(EMPLOYEE)
+  gender               Gender?
+  dateOfBirth          DateTime?
+  dateOfJoining        DateTime
+  phoneNumber          String?
+  address              String?      @db.Text
+  city                 String?
+  state                String?
+  country              String?
+  postalCode           String?
+  designation          String?
+  employmentType       EmployeeType @default(FTE)
+  region               Region       @default(IND)
+  profilePicture       String?
+  isActive             Boolean      @default(true)
+  emailVerified        Boolean      @default(false)
+  lastLogin            DateTime?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  // Relations
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  managerEmployeeId String?
+  manager           User?   @relation("ManagerEmployee", fields: [managerEmployeeId], references: [employeeId], onDelete: SetNull)
+  subordinates      User[]  @relation("ManagerEmployee")
+
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  approvals           Approval[]              @relation("Approver")
+  compOffRequests     CompOffRequest[]
+  compOffBalances     CompOffBalance[]
+  monthlyAccruals     MonthlyAccrual[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference?
+  auditLogs           AuditLog[]
+  delegationsGiven    Delegation[]            @relation("DelegatorUser")
+  delegationsReceived Delegation[]            @relation("DelegateUser")
+
+  @@index([email])
+  @@index([departmentId])
+  @@index([managerEmployeeId])
+  @@map("users")
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users User[]
+
+  @@map("departments")
+}
+
+model LeaveType {
+  leaveTypeCode        String           @id
+  name                 String
+  category             LeaveCategory
+  region               LeaveTypeRegion  @default(ALL)
+  description          String?          @db.Text
+  color                String?
+  isPaid               Boolean          @default(true)
+  requiresApproval     Boolean          @default(true)
+  maxConsecutiveDays   Int?
+  minDaysNotice        Int              @default(0)
+  maxDaysNotice        Int?
+  allowHalfDay         Boolean          @default(true)
+  allowNegativeBalance Boolean          @default(false)
+  carryForwardAllowed  Boolean          @default(false)
+  maxCarryForwardDays  Int?
+  accrualFrequency     AccrualFrequency @default(MONTHLY)
+  accrualRate          Float            @default(0)
+  annualAllocation     Float            @default(0)
+  expiryMonths         Int?
+  proRataApplicable    Boolean          @default(true)
+  attachmentRequired   Boolean          @default(false)
+  minBalanceRequired   Float?
+  isActive             Boolean          @default(true)
+  sortOrder            Int              @default(0)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  // Relations
+  leaveBalances   LeaveBalance[]
+  leaveRequests   LeaveRequest[]
+  monthlyAccruals MonthlyAccrual[]
+
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id              String    @id @default(uuid())
+  year            Int
+  allocated       Float     @default(0)
+  used            Float     @default(0)
+  pending         Float     @default(0)
+  available       Float     @default(0)
+  carriedForward  Float     @default(0)
+  expired         Float     @default(0)
+  encashed        Float     @default(0)
+  lastAccrualDate DateTime?
+  expiryDate      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  employeeId String
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  leaveTypeCode String
+  leaveType     LeaveType @relation(fields: [leaveTypeCode], references: [leaveTypeCode], onDelete: Cascade)
+
+  @@unique([employeeId, leaveTypeCode, year])
+  @@index([employeeId])
+  @@index([leaveTypeCode])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id                 String      @id @default(uuid())
+  startDate          DateTime
+  endDate            DateTime
+  totalDays          Float
+  isHalfDay          Boolean     @default(false)
+  halfDayType        String?
+  reason             String      @db.Text
+  status             LeaveStatus @default(PENDING)
+  remarks            String?     @db.Text
+  rejectionReason    String?     @db.Text
+  attachmentUrl      String?
+  appliedDate        DateTime    @default(now())
+  approvedDate       DateTime?
+  rejectedDate       DateTime?
+  cancelledDate      DateTime?
+  withdrawnDate      DateTime?
+  isDraft            Boolean     @default(false)
+  notifyManager      Boolean     @default(true)
+  notifyHR           Boolean     @default(true)
+  contactDuringLeave String?
+  emergencyContact   String?
+  handoverNotes      String?     @db.Text
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  // Relations
+  employeeId String
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  leaveTypeCode String
+  leaveType     LeaveType @relation(fields: [leaveTypeCode], references: [leaveTypeCode])
+
+  approvals            Approval[]
+  modificationRequests LeaveModificationRequest[]
+  cancellationRequests LeaveCancellationRequest[]
+  auditLogs            AuditLog[]
+
+  @@index([employeeId])
+  @@index([leaveTypeCode])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@map("leave_requests")
+}
+
+model Approval {
+  id           String         @id @default(uuid())
+  level        Int            @default(1)
+  status       ApprovalStatus @default(PENDING)
+  comments     String?        @db.Text
+  approvedDate DateTime?
+  rejectedDate DateTime?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  leaveRequestId String
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  approverEmployeeId String
+  approver           User   @relation("Approver", fields: [approverEmployeeId], references: [employeeId])
+
+  @@index([leaveRequestId])
+  @@index([approverEmployeeId])
+  @@index([status])
+  @@map("approvals")
+}
+
+model CompOffRequest {
+  id              String        @id @default(uuid())
+  workDate        DateTime
+  workHours       Float
+  reason          String        @db.Text
+  status          CompOffStatus @default(PENDING)
+  compOffDays     Float
+  remarks         String?       @db.Text
+  rejectionReason String?       @db.Text
+  approvedDate    DateTime?
+  rejectedDate    DateTime?
+  availedDate     DateTime?
+  expiryDate      DateTime?
+  isExpired       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  employeeId String
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  workLogs CompOffWorkLog[]
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([workDate])
+  @@map("comp_off_requests")
+}
+
+model CompOffWorkLog {
+  id              String   @id @default(uuid())
+  workDescription String   @db.Text
+  startTime       DateTime
+  endTime         DateTime
+  totalHours      Float
+  attachmentUrl   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  compOffRequestId String
+  compOffRequest   CompOffRequest @relation(fields: [compOffRequestId], references: [id], onDelete: Cascade)
+
+  @@index([compOffRequestId])
+  @@map("comp_off_work_logs")
+}
+
+model CompOffBalance {
+  id        String   @id @default(uuid())
+  year      Int
+  earned    Float    @default(0)
+  used      Float    @default(0)
+  available Float    @default(0)
+  expired   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employeeId String
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@unique([employeeId, year])
+  @@index([employeeId])
+  @@map("comp_off_balances")
+}
+
+model LeaveModificationRequest {
+  id                 String         @id @default(uuid())
+  newStartDate       DateTime?
+  newEndDate         DateTime?
+  newTotalDays       Float?
+  newReason          String?        @db.Text
+  modificationReason String         @db.Text
+  status             ApprovalStatus @default(PENDING)
+  approvedDate       DateTime?
+  rejectedDate       DateTime?
+  rejectionReason    String?        @db.Text
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relations
+  leaveRequestId String
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([leaveRequestId])
+  @@index([status])
+  @@map("leave_modification_requests")
+}
+
+model LeaveCancellationRequest {
+  id                 String         @id @default(uuid())
+  cancellationReason String         @db.Text
+  status             ApprovalStatus @default(PENDING)
+  approvedDate       DateTime?
+  rejectedDate       DateTime?
+  rejectionReason    String?        @db.Text
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relations
+  leaveRequestId String
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([leaveRequestId])
+  @@index([status])
+  @@map("leave_cancellation_requests")
+}
+
+model MonthlyAccrual {
+  id             String   @id @default(uuid())
+  year           Int
+  month          Int
+  accrualAmount  Float
+  openingBalance Float
+  closingBalance Float
+  accrualDate    DateTime
+  remarks        String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  employeeId String
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  leaveTypeCode String
+  leaveType     LeaveType @relation(fields: [leaveTypeCode], references: [leaveTypeCode])
+
+  @@unique([employeeId, leaveTypeCode, year, month])
+  @@index([employeeId])
+  @@index([leaveTypeCode])
+  @@index([year, month])
+  @@map("monthly_accruals")
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  type        NotificationType
+  title       String
+  message     String           @db.Text
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  data        String?          @db.Text
+  emailSent   Boolean          @default(false)
+  emailSentAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  employeeId String
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                        String   @id @default(uuid())
+  emailNotifications        Boolean  @default(true)
+  leaveRequestNotifications Boolean  @default(true)
+  approvalNotifications     Boolean  @default(true)
+  accrualNotifications      Boolean  @default(true)
+  reminderNotifications     Boolean  @default(true)
+  systemNotifications       Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  // Relations
+  employeeId String @unique
+  user       User   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model Delegation {
+  id        String   @id @default(uuid())
+  startDate DateTime
+  endDate   DateTime
+  reason    String?  @db.Text
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  delegatorEmployeeId String
+  delegator           User   @relation("DelegatorUser", fields: [delegatorEmployeeId], references: [employeeId], onDelete: Cascade)
+
+  delegateEmployeeId String
+  delegate           User   @relation("DelegateUser", fields: [delegateEmployeeId], references: [employeeId], onDelete: Cascade)
+
+  @@index([delegatorEmployeeId])
+  @@index([delegateEmployeeId])
+  @@index([isActive])
+  @@map("delegations")
+}
+
+model LeaveTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  pattern     String   @db.Text
+  isPublic    Boolean  @default(false)
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("leave_templates")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String
+  oldValues String?  @db.Text
+  newValues String?  @db.Text
+  ipAddress String?
+  userAgent String?  @db.Text
+  timestamp DateTime @default(now())
+
+  // Relations
+  employeeId String?
+  user       User?   @relation(fields: [employeeId], references: [employeeId], onDelete: SetNull)
+
+  leaveRequestId String?
+  leaveRequest   LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model Employee {
+  employeeId         String        @id
+  firstName          String
+  lastName           String
+  email              String        @unique
+  phoneNumber        String?
+  location           String?
+  designation        String?
+  department         String?
+  employmentType     EmployeeType?
+  reportingManager   String
+  reportingManagerId String
+  lmsAccess          LMSAccess
+  isActive           Boolean       @default(true)
+  lmsUserCreated     Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([email])
+  @@index([reportingManagerId])
+  @@map("employees")
+}
+
+model LeaveProcessHistory {
+  id             String       @id @default(uuid())
+  region         Region
+  employmentType EmployeeType
+  processMonth   Int
+  processYear    Int
+  leaveTypeCode  String
+  daysProcessed  Float
+  employeesCount Int
+  processedBy    String
+  processedAt    DateTime     @default(now())
+
+  @@index([region, employmentType, processMonth, processYear])
+  @@map("leave_process_history")
+}

@@ -1,0 +1,61 @@
+Enhancement only for the "Admin" login role
+
+Create a separate table in the db to maintain Employee records with details stated below
+
+Left hand sidebar menu called "Employee Details"
+
+2 methods to add an employee:
+
+Method 1: Import through formatted excel sheet with headers in this order:
+
+Employee ID
+First Name
+Last name
+Email ID
+Phone Number
+Location
+Designation
+Department
+Reporting Manager
+Reporting Manager ID
+LMS Access
+Active
+
+
+Add a button to the "Employee Details" page called "Import Excel"
+Wire this button so that the system asks for a path to the excel and lets the user "Import"
+Verify if the excel has correct format with first row as headers.
+Employee ID, First Name, Last Name, Email ID, Reporting Manager, Reporting Manager ID, LMS Access, Active are mandatory. Verify that this data is present.
+Verify that "LMS Access" has one of the 2 values "EMP" or "MGR"
+Verify that "Active" has 2 values "Yes" or "No". Store this as Boolean in the db.
+If the checks are successful do this:
+1. If the Employee ID already exists in the records - update it with the data on the excel sheet
+2. If the Employee ID does not already exist then create a new record with the details in the excel sheet
+Capture the timestamp when the record was created and updated in 2 separate column in the db.
+
+Method 2: Manually adding an employee
+
+Add a button to the "Employee Details" page next to the "Import Excel" called "Add Employee"
+
+Open a modal pop-up with a form that has these columns:
+
+Employee ID
+First Name
+Last name
+Email ID
+Phone Number
+Location
+Designation
+Department
+Reporting Manager
+LMS Access
+Active
+
+Employee ID, First Name, Last Name, Email ID, Reporting Manager, Reporting Manager ID, LMS Access are mandatory. Form should not be submitted without this data.
+By default the "Active" should be set to "Yes" when creating through this form.
+After submitting capture the timestamp when the record was created and updated in 2 separate column in the db.
+
+Employee Details Screen
+On the "Employee Details" Screen show a modern looking grid with these column Employee ID, First Name, Last name, Email ID, Location, Reporting Manager, Action
+
+In the Action column show 2 icons with actions "View" & "Edit"

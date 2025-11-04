@@ -1,0 +1,21 @@
+Leave Policy - General
+
+Create a menu in the left hand menu/sidebar - "Leave Policy" in the Admin
+
+On the Leave Policy Screen:
+Create 2 Sections by Region "India" and "US"
+
+Section 1: India
+- show 3 subsections in 3 rows split by Employment Type "Full Time Employee", "Full Time Direct Consultant", "Consultant"
+- show leave categories and empty text boxes in front of each of the Employment Types: "Casual Leave", "Privilege Leave". Default value should be 0.
+- show a dropdown with Month-Year in front of each of the Employment Type subsections after the leave types. Show a button that reads "Process Leaves" next to each Month-Year dropdown. The default value in the dropdown should be current month-year.
+
+- User adds number of days (partial/decimal values are possible) inside each of the leave types for a specific Employment Type subsection.
+- User selects a month and clicks "Process leaves" in front of it. Needs User confirmation to proceed.
+- Use this logic after button is clicked: Filter all the "Active" = "Yes" employees. Filter all employees that have location/region = IND and Employment Type that matches the Employment Type for which the "Process Leaves" button is clicked.
+- For all these filtered employees - add the values mentioned in the Casual Leave and Privilege leave for that specific employment type subsection to the existing leave balances
+- Create a "Process History" button. Capture the specific values, which Month-Year and which Employment Type the data is processed and show it when this button is clicked.
+- When processing for the same month-year for a second time, refer to this History to check and alert the user with a warning message before proceeding.
+
+Section 2: US
+<To be developed>
