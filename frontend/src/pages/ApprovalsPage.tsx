@@ -504,18 +504,20 @@ export default function ApprovalsPage() {
                   <TableCell>Employee</TableCell>
                   {isAdmin && <TableCell>Region</TableCell>}
                   <TableCell>Leave Type</TableCell>
-                  <TableCell>Start Date</TableCell>
-                  <TableCell>End Date</TableCell>
-                  <TableCell>Days</TableCell>
+                  <TableCell align="center">Start Date</TableCell>
+                  <TableCell align="center">End Date</TableCell>
+                  <TableCell align="center">Days</TableCell>
+                  <TableCell align="center">Applied On</TableCell>
+                  <TableCell>Approver</TableCell>
                   <TableCell>Reason</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell align="center">Status</TableCell>
+                  <TableCell align="center">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredApprovals?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 11 : 10} align="center">
+                    <TableCell colSpan={isAdmin ? 13 : 12} align="center">
                       {isAdmin ? 'No leave requests found' : 'No team leave requests found'}
                     </TableCell>
                   </TableRow>
@@ -544,25 +546,35 @@ export default function ApprovalsPage() {
                         </TableCell>
                         {isAdmin && <TableCell>{leave.user.region}</TableCell>}
                         <TableCell>{leave.leaveType.name}</TableCell>
-                        <TableCell>
+                        <TableCell align="center">
                           {new Date(leave.startDate).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>
+                        <TableCell align="center">
                           {new Date(leave.endDate).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>{leave.totalDays}</TableCell>
+                        <TableCell align="center">{leave.totalDays}</TableCell>
+                        <TableCell align="center">
+                          {leave.appliedDate
+                            ? new Date(leave.appliedDate).toLocaleDateString()
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {leave.user?.manager
+                            ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
+                            : 'N/A'}
+                        </TableCell>
                         <TableCell>
                           {leave.reason.substring(0, 30)}
                           {leave.reason.length > 30 && '...'}
                         </TableCell>
-                        <TableCell>
+                        <TableCell align="center">
                           <Chip
                             label={leave.status}
                             {...getStatusColor(leave.status)}
                             size="small"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell align="center">
                           {isPending ? (
                             <ButtonGroup size="small">
                               <Button
@@ -573,6 +585,8 @@ export default function ApprovalsPage() {
                                   color: '#fff !important',
                                   backgroundColor: '#11998e !important',
                                   backgroundImage: 'none !important',
+                                  py: 0.5,
+                                  minHeight: 'auto',
                                   '&:hover': {
                                     backgroundColor: '#00695c !important',
                                     backgroundImage: 'none !important',
@@ -594,6 +608,8 @@ export default function ApprovalsPage() {
                                   color: '#fff !important',
                                   backgroundColor: '#f857a6 !important',
                                   backgroundImage: 'none !important',
+                                  py: 0.5,
+                                  minHeight: 'auto',
                                   '&:hover': {
                                     backgroundColor: '#c62828 !important',
                                     backgroundImage: 'none !important',
@@ -618,6 +634,8 @@ export default function ApprovalsPage() {
                                 color: '#fff !important',
                                 backgroundColor: '#d84315 !important',
                                 backgroundImage: 'none !important',
+                                py: 0.5,
+                                minHeight: 'auto',
                                 '&:hover': {
                                   backgroundColor: '#bf360c !important',
                                   backgroundImage: 'none !important',

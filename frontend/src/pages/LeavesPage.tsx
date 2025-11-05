@@ -27,15 +27,17 @@ import {
   Radio,
   Alert,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Cancel, FilterList } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import toast from 'react-hot-toast';
 import api from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LeavesPage() {
+  const { user } = useAuth();
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogKey, setDialogKey] = useState(0);
   const [formData, setFormData] = useState({
@@ -47,6 +49,15 @@ export default function LeavesPage() {
     endDayType: 'full' as 'full' | 'first-half' | 'second-half',
   });
   const [calculatedDays, setCalculatedDays] = useState<number>(0);
+  const [cancelDialog, setCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
+
+  // Filter states
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [fromDate, setFromDate] = useState<Dayjs | null>(null);
+  const [toDate, setToDate] = useState<Dayjs | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -106,12 +117,29 @@ export default function LeavesPage() {
   });
 
   // Fetch leave types
-  const { data: leaveTypes } = useQuery({
+  const { data: leaveTypesData } = useQuery({
     queryKey: ['leave-types'],
     queryFn: async () => {
       const response = await api.get('/leave-balances/leave-types');
       return response.data.data;
     },
+  });
+
+  // Filter leave types based on gender for ML/PTL leaves
+  const leaveTypes = (leaveTypesData || []).filter((type: any) => {
+    const leaveCode = type.leaveTypeCode;
+
+    // Hide Maternity Leave (ML) for non-female employees
+    if (leaveCode === 'ML' && user?.gender !== 'F') {
+      return false;
+    }
+
+    // Hide Paternity Leave (PTL) for non-male employees
+    if (leaveCode === 'PTL' && user?.gender !== 'M') {
+      return false;
+    }
+
+    return true;
   });
 
   // Create leave mutation
@@ -129,6 +157,47 @@ export default function LeavesPage() {
       toast.error(error.response?.data?.message || 'Failed to submit leave request');
     },
   });
+
+  // Cancel leave mutation
+  const cancelMutation = useMutation({
+    mutationFn: async ({ leaveId, reason }: { leaveId: string; reason: string }) => {
+      const response = await api.post(`/leaves/${leaveId}/cancel`, { reason });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Leave request cancelled successfully');
+      queryClient.invalidateQueries({ queryKey: ['leaves'] });
+      setCancelDialog(false);
+      setCancelReason('');
+      setSelectedLeaveId(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to cancel leave');
+    },
+  });
+
+  const canCancelLeave = (leave: any) => {
+    if (!['PENDING', 'APPROVED'].includes(leave.status)) return false;
+    const startDate = new Date(leave.startDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return startDate >= today;
+  };
+
+  const handleCancelClick = (leaveId: string) => {
+    setSelectedLeaveId(leaveId);
+    setCancelDialog(true);
+  };
+
+  const handleCancelSubmit = () => {
+    if (!cancelReason.trim()) {
+      toast.error('Please provide a cancellation reason');
+      return;
+    }
+    if (selectedLeaveId) {
+      cancelMutation.mutate({ leaveId: selectedLeaveId, reason: cancelReason });
+    }
+  };
 
   const resetForm = () => {
     setFormData({
@@ -182,6 +251,47 @@ export default function LeavesPage() {
     });
   };
 
+  // Filter leaves based on all filter criteria
+  const filteredLeaves = leaves?.filter((leave: any) => {
+    // Leave Type filter
+    if (leaveTypeFilter !== 'all' && leave.leaveType?.leaveTypeCode !== leaveTypeFilter) {
+      return false;
+    }
+
+    // Status filter
+    if (statusFilter !== 'all' && leave.status !== statusFilter) {
+      return false;
+    }
+
+    // Date range filter - check if leave start/end date falls within the filter range
+    const leaveStartDate = dayjs(leave.startDate);
+    const leaveEndDate = dayjs(leave.endDate);
+
+    if (fromDate) {
+      // Leave must end on or after the fromDate
+      if (leaveEndDate.isBefore(fromDate, 'day')) {
+        return false;
+      }
+    }
+
+    if (toDate) {
+      // Leave must start on or before the toDate
+      if (leaveStartDate.isAfter(toDate, 'day')) {
+        return false;
+      }
+    }
+
+    return true;
+  }) || [];
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setLeaveTypeFilter('all');
+    setStatusFilter('all');
+    setFromDate(null);
+    setToDate(null);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED':
@@ -218,6 +328,96 @@ export default function LeavesPage() {
         </Button>
       </Box>
 
+      {/* Filters Section */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <FilterList sx={{ color: 'text.secondary' }} />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Filters
+            </Typography>
+          </Box>
+
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Leave Type Filter */}
+              <TextField
+                select
+                label="Leave Type"
+                value={leaveTypeFilter}
+                onChange={(e) => setLeaveTypeFilter(e.target.value)}
+                sx={{ minWidth: 200 }}
+                size="small"
+              >
+                <MenuItem value="all">All Leave Types</MenuItem>
+                {leaveTypes?.map((type: any) => (
+                  <MenuItem key={type.leaveTypeCode} value={type.leaveTypeCode}>
+                    {type.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              {/* Status Filter */}
+              <TextField
+                select
+                label="Status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                sx={{ minWidth: 180 }}
+                size="small"
+              >
+                <MenuItem value="all">All Status</MenuItem>
+                <MenuItem value="PENDING">Pending</MenuItem>
+                <MenuItem value="APPROVED">Approved</MenuItem>
+                <MenuItem value="REJECTED">Rejected</MenuItem>
+                <MenuItem value="CANCELLED">Cancelled</MenuItem>
+              </TextField>
+
+              {/* From Date Filter */}
+              <DatePicker
+                label="From Date"
+                value={fromDate}
+                onChange={(date) => setFromDate(date)}
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    sx: { minWidth: 180 },
+                  },
+                }}
+              />
+
+              {/* To Date Filter */}
+              <DatePicker
+                label="To Date"
+                value={toDate}
+                onChange={(date) => setToDate(date)}
+                minDate={fromDate || undefined}
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    sx: { minWidth: 180 },
+                  },
+                }}
+              />
+
+              {/* Clear Filters Button */}
+              <Button
+                variant="outlined"
+                onClick={handleClearFilters}
+                sx={{ height: 40 }}
+              >
+                Clear Filters
+              </Button>
+
+              {/* Results Count */}
+              <Typography variant="body2" sx={{ color: 'text.secondary', ml: 'auto' }}>
+                Showing {filteredLeaves.length} of {leaves?.length || 0} leave{leaves?.length !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          </LocalizationProvider>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent>
           <TableContainer>
@@ -225,41 +425,88 @@ export default function LeavesPage() {
               <TableHead>
                 <TableRow>
                   <TableCell>Leave Type</TableCell>
-                  <TableCell>Start Date</TableCell>
-                  <TableCell>End Date</TableCell>
-                  <TableCell>Days</TableCell>
+                  <TableCell align="center">Start Date</TableCell>
+                  <TableCell align="center">End Date</TableCell>
+                  <TableCell align="center">Days</TableCell>
+                  <TableCell align="center">Applied On</TableCell>
+                  <TableCell>Approver</TableCell>
                   <TableCell>Reason</TableCell>
-                  <TableCell>Status</TableCell>
+                  <TableCell align="center">Status</TableCell>
+                  <TableCell align="center">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {leaves?.length === 0 ? (
+                {filteredLeaves.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      No leave requests found
+                    <TableCell colSpan={9} align="center">
+                      {leaves?.length === 0
+                        ? 'No leave requests found'
+                        : 'No leaves match the selected filters'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  leaves?.map((leave: any) => (
+                  filteredLeaves.map((leave: any) => (
                     <TableRow key={leave.id}>
                       <TableCell>{leave.leaveType?.name}</TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         {new Date(leave.startDate).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         {new Date(leave.endDate).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>{leave.totalDays}</TableCell>
+                      <TableCell align="center">{leave.totalDays}</TableCell>
+                      <TableCell align="center">
+                        {leave.appliedDate
+                          ? new Date(leave.appliedDate).toLocaleDateString()
+                          : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {leave.user?.manager
+                          ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
+                          : 'N/A'}
+                      </TableCell>
                       <TableCell>
                         {leave.reason.substring(0, 50)}
                         {leave.reason.length > 50 && '...'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         <Chip
                           label={leave.status}
                           color={getStatusColor(leave.status)}
                           size="small"
                         />
+                      </TableCell>
+                      <TableCell align="center">
+                        {canCancelLeave(leave) ? (
+                          <Button
+                            size="small"
+                            startIcon={<Cancel />}
+                            onClick={() => handleCancelClick(leave.id)}
+                            disabled={cancelMutation.isPending}
+                            sx={{
+                              color: '#fff !important',
+                              backgroundColor: '#d84315 !important',
+                              backgroundImage: 'none !important',
+                              py: 0.5,
+                              minHeight: 'auto',
+                              '&:hover': {
+                                backgroundColor: '#bf360c !important',
+                                backgroundImage: 'none !important',
+                              },
+                              '&:disabled': {
+                                backgroundColor: 'rgba(0, 0, 0, 0.12) !important',
+                                color: 'rgba(0, 0, 0, 0.26) !important',
+                                backgroundImage: 'none !important',
+                              },
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        ) : (
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            -
+                          </Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
@@ -370,6 +617,35 @@ export default function LeavesPage() {
             disabled={createLeaveMutation.isPending}
           >
             {createLeaveMutation.isPending ? 'Submitting...' : 'Submit'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cancel Leave Dialog */}
+      <Dialog open={cancelDialog} onClose={() => setCancelDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Cancel Leave Request</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Cancellation Reason"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            multiline
+            rows={4}
+            fullWidth
+            required
+            sx={{ mt: 2 }}
+            placeholder="Please provide a reason for cancelling this leave request"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelDialog(false)}>Close</Button>
+          <Button
+            onClick={handleCancelSubmit}
+            variant="contained"
+            color="warning"
+            disabled={cancelMutation.isPending}
+          >
+            {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Leave'}
           </Button>
         </DialogActions>
       </Dialog>

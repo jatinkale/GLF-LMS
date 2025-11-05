@@ -7,15 +7,17 @@ interface ProcessLeavesInput {
   employmentType: EmployeeType;
   month: number;
   year: number;
-  casualLeave: number;
-  privilegeLeave: number;
+  casualLeave?: number;
+  privilegeLeave?: number;
+  plannedTimeOff?: number;
+  bereavementLeave?: number;
   processedBy: string;
 }
 
 export class LeavePolicyService {
   // Process leaves for a specific region, employment type, and month-year
   async processLeaves(data: ProcessLeavesInput) {
-    const { region, employmentType, month, year, casualLeave, privilegeLeave, processedBy } = data;
+    const { region, employmentType, month, year, casualLeave, privilegeLeave, plannedTimeOff, bereavementLeave, processedBy } = data;
 
     try {
       // Check if already processed for this month-year
@@ -107,7 +109,7 @@ export class LeavePolicyService {
       }
 
       // Process Privilege Leave if value > 0
-      if (privilegeLeave > 0) {
+      if (privilegeLeave && privilegeLeave > 0) {
         for (const employee of employees) {
           // Check if leave balance exists
           const existingBalance = await prisma.leaveBalance.findFirst({
@@ -161,12 +163,124 @@ export class LeavePolicyService {
         });
       }
 
+      // Process Planned Time Off (US) if value > 0
+      if (plannedTimeOff && plannedTimeOff > 0) {
+        for (const employee of employees) {
+          // Check if leave balance exists
+          const existingBalance = await prisma.leaveBalance.findFirst({
+            where: {
+              employeeId: employee.employeeId,
+              leaveTypeCode: 'PTO',
+              year: currentYear,
+            },
+          });
+
+          if (existingBalance) {
+            // Update existing balance
+            await prisma.leaveBalance.update({
+              where: { id: existingBalance.id },
+              data: {
+                allocated: { increment: plannedTimeOff },
+                available: { increment: plannedTimeOff },
+              },
+            });
+          } else {
+            // Create new balance
+            await prisma.leaveBalance.create({
+              data: {
+                employeeId: employee.employeeId,
+                leaveTypeCode: 'PTO',
+                year: currentYear,
+                allocated: plannedTimeOff,
+                used: 0,
+                pending: 0,
+                available: plannedTimeOff,
+                carriedForward: 0,
+                expired: 0,
+                encashed: 0,
+              },
+            });
+          }
+        }
+
+        // Record in history
+        await prisma.leaveProcessHistory.create({
+          data: {
+            region,
+            employmentType,
+            processMonth: month,
+            processYear: year,
+            leaveTypeCode: 'PTO',
+            daysProcessed: plannedTimeOff,
+            employeesCount: employees.length,
+            processedBy,
+          },
+        });
+      }
+
+      // Process Bereavement Leave (US) if value > 0
+      if (bereavementLeave && bereavementLeave > 0) {
+        for (const employee of employees) {
+          // Check if leave balance exists
+          const existingBalance = await prisma.leaveBalance.findFirst({
+            where: {
+              employeeId: employee.employeeId,
+              leaveTypeCode: 'BL',
+              year: currentYear,
+            },
+          });
+
+          if (existingBalance) {
+            // Update existing balance
+            await prisma.leaveBalance.update({
+              where: { id: existingBalance.id },
+              data: {
+                allocated: { increment: bereavementLeave },
+                available: { increment: bereavementLeave },
+              },
+            });
+          } else {
+            // Create new balance
+            await prisma.leaveBalance.create({
+              data: {
+                employeeId: employee.employeeId,
+                leaveTypeCode: 'BL',
+                year: currentYear,
+                allocated: bereavementLeave,
+                used: 0,
+                pending: 0,
+                available: bereavementLeave,
+                carriedForward: 0,
+                expired: 0,
+                encashed: 0,
+              },
+            });
+          }
+        }
+
+        // Record in history
+        await prisma.leaveProcessHistory.create({
+          data: {
+            region,
+            employmentType,
+            processMonth: month,
+            processYear: year,
+            leaveTypeCode: 'BL',
+            daysProcessed: bereavementLeave,
+            employeesCount: employees.length,
+            processedBy,
+          },
+        });
+      }
+
       return {
         success: true,
         message: `Successfully processed leaves for ${employees.length} employees`,
         employeesProcessed: employees.length,
-        casualLeave: casualLeave,
-        privilegeLeave: privilegeLeave,
+        casualLeave: casualLeave || 0,
+        privilegeLeave: privilegeLeave || 0,
+        plannedTimeOff: plannedTimeOff || 0,
+        bereavementLeave: bereavementLeave || 0,
         alreadyProcessed: existingHistory.length > 0,
       };
     } catch (error) {

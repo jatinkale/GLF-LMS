@@ -81,6 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
       employeeId,
       firstName,
       lastName,
+      gender,
       email,
       phoneNumber,
       location,
@@ -121,6 +122,7 @@ router.post('/', async (req: Request, res: Response) => {
       employeeId: employeeId.trim(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      gender: gender?.trim(),
       email: email.trim().toLowerCase(),
       phoneNumber: phoneNumber?.trim(),
       location: location?.trim(),
@@ -161,6 +163,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const {
       firstName,
       lastName,
+      gender,
       email,
       phoneNumber,
       location,
@@ -203,6 +206,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const employee = await employeeService.updateEmployee(id, {
       ...(firstName && { firstName: firstName.trim() }),
       ...(lastName && { lastName: lastName.trim() }),
+      ...(gender !== undefined && { gender: gender?.trim() }),
       ...(email && { email: email.trim().toLowerCase() }),
       ...(phoneNumber !== undefined && { phoneNumber: phoneNumber?.trim() }),
       ...(location !== undefined && { location: location?.trim() }),

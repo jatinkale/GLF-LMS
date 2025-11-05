@@ -1,0 +1,17 @@
+Admin - Leave Policy - General
+
+There is a menu in the left hand menu/sidebar - "Leave Policy"
+
+On the Leave Policy Screen:
+There are 2 Sections by Region "India" and "US"
+
+In Section 2: US
+1. Create all the subsections and functionality exactly same that for "India" subsection
+2. Rename "Casual Leave" and "Privilege Leave" test boxes with "Planned Time Off" and "Bereavement Leave"
+
+3. User adds number of days (partial/decimal values are possible) inside each of the leave types for a specific Employment Type subsection.
+- User selects a month and clicks "Process leaves" in front of it. Needs User confirmation to proceed.
+- Use this logic after button is clicked: Filter all the "Active" = "Yes" employees. Filter all employees that have location/region = US and Employment Type that matches the Employment Type for which the "Process Leaves" button is clicked.
+- For all these filtered employees - add the values mentioned in the Planned Time Off (PTO) and Bereavement Leave (BL) for that specific employment type subsection to the existing leave balances (PTO and BL)
+- Create a "Process History" button. Capture the specific values, which Month-Year and which Employment Type the data is processed and show it when this button is clicked.
+- When processing for the same month-year for a second time, refer to this History to check and alert the user with a warning message before proceeding.

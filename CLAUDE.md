@@ -26,7 +26,408 @@ LMS v2 is a comprehensive Leave Management System built with modern web technolo
 
 ## Recent Major Changes
 
-### Approval System Enhancements (Latest Update)
+### Employee Date Fields & Gender-Based Leave Filtering (Latest Update)
+
+**Date:** November 5, 2025
+
+#### Summary
+Added Date of Joining and Exit Date fields to Employee Management, and implemented gender-based filtering for Maternity Leave (ML) and Paternity Leave (PTL).
+
+**Key Changes:**
+
+1. **Date Fields in Employee Management:**
+   - Added `dateOfJoining` (mandatory) and `exitDate` (optional) fields to Employee model
+   - Fields positioned between "Phone Number" and "Location" in Excel uploads
+   - Date of Joining is required when adding/editing employees
+   - Exit Date is optional and can be left blank
+   - Dates are displayed in View Employee modal but NOT in the data grid
+   - Proper date parsing for Excel serial numbers and date strings
+
+2. **Gender-Based Leave Filtering:**
+   - Maternity Leave (ML) is only visible to Female employees (Gender = 'F')
+   - Paternity Leave (PTL) is only visible to Male employees (Gender = 'M')
+   - Filtering applied in:
+     - Dashboard leave balance cards
+     - Apply Leaves dialog leave type dropdown
+     - Leave Type filter dropdown
+   - Fixed leave type code from "PAT" to "PTL" (actual database value)
+
+#### Database Schema Changes
+
+**Employee Model** (`backend/prisma/schema.prisma`):
+```prisma
+model Employee {
+  employeeId         String        @id
+  firstName          String
+  lastName           String
+  gender             String?
+  email              String        @unique
+  phoneNumber        String?
+  dateOfJoining      DateTime      @default(now())  // ADDED
+  exitDate           DateTime?                      // ADDED
+  location           String?
+  // ... rest of fields
+}
+```
+
+#### Backend Changes
+
+**Files Modified:**
+
+1. **`backend/src/services/employeeService.ts`**:
+   - Updated `EmployeeData` interface to include `dateOfJoining: Date` and `exitDate?: Date`
+   - Updated Excel validation headers to include "Date of Joining" (mandatory) and "Exit Date" (optional)
+   - Added date validation in `validateExcelFile()` method
+   - Implemented date parsing for both Excel serial numbers and string dates:
+     ```typescript
+     // Parse Date of Joining (mandatory)
+     let dateOfJoining: Date;
+     if (typeof row['Date of Joining'] === 'number') {
+       dateOfJoining = xlsx.SSF.parse_date_code(row['Date of Joining']);
+       dateOfJoining = new Date(dateOfJoining.y, dateOfJoining.m - 1, dateOfJoining.d);
+     } else {
+       dateOfJoining = new Date(row['Date of Joining']);
+     }
+     ```
+   - Updated `createEmployee()`, `updateEmployee()`, and `importEmployees()` methods to handle dates
+
+2. **Excel Upload Format**:
+   - New column order: `Employee ID, First Name, Last Name, Gender, Email ID, Phone Number, **Date of Joining, Exit Date**, Location, Designation, Department, Employment Type, Reporting Manager, Reporting Manager ID, LMS Access, Active`
+   - Date of Joining validation added (mandatory field)
+
+#### Frontend Changes
+
+**Files Modified:**
+
+1. **`frontend/src/pages/EmployeeDetailsPage.tsx`**:
+   - Updated `Employee` interface:
+     ```typescript
+     interface Employee {
+       employeeId: string;
+       firstName: string;
+       lastName: string;
+       gender?: string;
+       email: string;
+       phoneNumber?: string;
+       dateOfJoining: string;  // ADDED
+       exitDate?: string;      // ADDED
+       location?: string;
+       // ... rest of fields
+     }
+     ```
+   - Updated `EmployeeFormData` interface with date fields
+   - Added date fields to Add Employee form (lines ~805, ~815)
+   - Added date fields to Edit Employee form (lines ~993, ~1003)
+   - Added date display to View Employee modal (lines ~1190, ~1198)
+   - Updated `handleEditEmployee()` to format dates for date inputs:
+     ```typescript
+     dateOfJoining: employee.dateOfJoining ? new Date(employee.dateOfJoining).toISOString().split('T')[0] : '',
+     exitDate: employee.exitDate ? new Date(employee.exitDate).toISOString().split('T')[0] : '',
+     ```
+   - Updated Excel import instruction message
+
+2. **`frontend/src/pages/DashboardPage.tsx`** (Lines 268-284):
+   - Implemented gender-based filtering for leave balance cards:
+     ```typescript
+     const allBalances = Array.isArray(balancesData) ? balancesData : [];
+     const balances = allBalances.filter((balance: any) => {
+       const leaveCode = balance.leaveType?.leaveTypeCode;
+
+       // Hide Maternity Leave (ML) for non-female employees
+       if (leaveCode === 'ML' && user?.gender !== 'F') {
+         return false;
+       }
+
+       // Hide Paternity Leave (PTL) for non-male employees
+       if (leaveCode === 'PTL' && user?.gender !== 'M') {
+         return false;
+       }
+
+       return true;
+     });
+     ```
+
+3. **`frontend/src/pages/LeavesPage.tsx`** (Lines 128-143):
+   - Imported `useAuth` hook to access user gender
+   - Implemented gender-based filtering for leave types in Apply Leaves dialog:
+     ```typescript
+     const { user } = useAuth();
+
+     const leaveTypes = (leaveTypesData || []).filter((type: any) => {
+       const leaveCode = type.leaveTypeCode;
+
+       // Hide Maternity Leave (ML) for non-female employees
+       if (leaveCode === 'ML' && user?.gender !== 'F') {
+         return false;
+       }
+
+       // Hide Paternity Leave (PTL) for non-male employees
+       if (leaveCode === 'PTL' && user?.gender !== 'M') {
+         return false;
+       }
+
+       return true;
+     });
+     ```
+   - Filtered array is used in both Leave Type filter dropdown and Apply Leaves dialog
+
+4. **`frontend/src/contexts/AuthContext.tsx`** (Line 11):
+   - Added `gender?: string` field to User interface
+
+5. **`backend/src/services/authService.ts`** (Line 114):
+   - Added `gender: true` to login select statement to include gender in login response
+
+6. **`backend/src/services/userManagementService.ts`** (Line 44):
+   - Added `gender: employee.gender` to user creation from employee record
+
+#### Bug Fixes
+
+1. **Paternity Leave Code Fix:**
+   - Fixed leave type code from "PAT" to "PTL" (actual database value)
+   - Database has: `PTL - Paternity Leave` (category: PATERNITY)
+   - Updated filtering logic in both DashboardPage and LeavesPage
+
+2. **Gender Field in User Object:**
+   - Ensured gender is returned in login response
+   - Added to User interface in AuthContext
+   - Gender is now properly synced from Employee to User during LMS user creation
+
+#### Important Notes
+
+- **Date of Joining** is a mandatory field when creating or importing employees
+- **Exit Date** is optional and can be left blank
+- Dates are **NOT shown** in the Employee Management data grid (as per requirement)
+- Dates are shown in the View Employee modal with formatted display
+- Gender-based filtering requires users to log out and log back in after gender field was added to existing users
+- Leave type filtering is client-side and happens in real-time
+- Excel date parsing handles both serial numbers (Excel native) and date strings
+
+#### Database Leave Type Codes
+
+Current leave types in the database:
+- **BL** - Bereavement Leave (SPECIAL)
+- **CL** - Casual Leave (CASUAL)
+- **COMP** - Compensatory Off (COMP_OFF)
+- **LWP** - Leave Without Pay (LWP)
+- **ML** - Maternity Leave (MATERNITY) → Female only
+- **PL** - Privilege Leave (PRIVILEGE)
+- **PTL** - Paternity Leave (PATERNITY) → Male only
+- **PTO** - Paid Time Off (PTO)
+
+---
+
+### UI/UX Improvements to Data Grids
+
+**Date:** November 4, 2025
+
+#### Summary
+Comprehensive UI improvements across all leave data grids to enhance readability, consistency, and user experience. Added missing Actions column to Employee My Leaves page with full cancel functionality.
+
+**Key Changes:**
+
+1. **Data Grid Layout Improvements:**
+   - Center-aligned columns: Start Date, End Date, Days, Applied On, Status, and Actions
+   - Reduced button heights for Cancel, Approve, and Reject buttons (using `py: 0.5`, `minHeight: 'auto'`)
+   - Consistent row spacing across all tables
+   - Improved visual hierarchy and readability
+
+2. **Employee My Leaves Page Enhancements:**
+   - Added missing Actions column to leave requests table
+   - Implemented full cancel leave functionality
+   - Added cancel dialog with reason input
+   - Business logic: Can only cancel PENDING/APPROVED leaves with start date >= today
+   - Cancel mutation with proper error handling and toast notifications
+   - Query invalidation for real-time updates
+
+3. **Affected Pages:**
+   - **LeavesPage.tsx** (Employee My Leaves):
+     - Added Actions column with Cancel button
+     - Implemented `canCancelLeave()` function
+     - Added `cancelMutation` for API integration
+     - Added Cancel Leave Dialog with reason TextField
+     - Center alignment for date, numeric, and status columns
+     - Updated table colSpan from 8 to 9
+
+   - **DashboardPage.tsx** (Employee Recent Leaves & Manager Pending Team Leaves):
+     - Center-aligned date, numeric, and action columns in both sections
+     - Reduced Cancel button height in Employee section
+     - Reduced Approve/Reject button heights in Manager section
+     - Consistent button styling with custom colors
+
+   - **ApprovalsPage.tsx** (Admin Approvals):
+     - Center-aligned date, numeric, and action columns
+     - Reduced all action button heights (Approve, Reject, Cancel)
+     - Maintained existing bulk action functionality
+
+#### Frontend Changes
+
+**Updated Components:**
+
+1. **`frontend/src/pages/LeavesPage.tsx`** (Lines 30, 50-52, 136-152, 154-175, 269-280, 282-356, 466-493):
+   ```typescript
+   // Added imports
+   import { Add, Cancel } from '@mui/icons-material';
+
+   // Added state management
+   const [cancelDialog, setCancelDialog] = useState(false);
+   const [cancelReason, setCancelReason] = useState('');
+   const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
+
+   // Cancel mutation
+   const cancelMutation = useMutation({
+     mutationFn: async ({ leaveId, reason }: { leaveId: string; reason: string }) => {
+       const response = await api.post(`/leaves/${leaveId}/cancel`, { reason });
+       return response.data;
+     },
+     onSuccess: () => {
+       toast.success('Leave request cancelled successfully');
+       queryClient.invalidateQueries({ queryKey: ['leaves'] });
+       setCancelDialog(false);
+       setCancelReason('');
+       setSelectedLeaveId(null);
+     },
+     onError: (error: any) => {
+       toast.error(error.response?.data?.message || 'Failed to cancel leave');
+     },
+   });
+
+   // Business logic for cancellation
+   const canCancelLeave = (leave: any) => {
+     if (!['PENDING', 'APPROVED'].includes(leave.status)) return false;
+     const startDate = new Date(leave.startDate);
+     const today = new Date();
+     today.setHours(0, 0, 0, 0);
+     return startDate >= today;
+   };
+
+   // Table structure with Actions column
+   <TableCell align="center">Actions</TableCell>
+
+   // Actions cell implementation
+   <TableCell align="center">
+     {canCancelLeave(leave) ? (
+       <Button
+         size="small"
+         startIcon={<Cancel />}
+         onClick={() => handleCancelClick(leave.id)}
+         disabled={cancelMutation.isPending}
+         sx={{
+           color: '#fff !important',
+           backgroundColor: '#d84315 !important',
+           backgroundImage: 'none !important',
+           py: 0.5,
+           minHeight: 'auto',
+           '&:hover': {
+             backgroundColor: '#bf360c !important',
+             backgroundImage: 'none !important',
+           },
+           '&:disabled': {
+             backgroundColor: 'rgba(0, 0, 0, 0.12) !important',
+             color: 'rgba(0, 0, 0, 0.26) !important',
+             backgroundImage: 'none !important',
+           },
+         }}
+       >
+         Cancel
+       </Button>
+     ) : (
+       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+         -
+       </Typography>
+     )}
+   </TableCell>
+
+   // Cancel Leave Dialog
+   <Dialog open={cancelDialog} onClose={() => setCancelDialog(false)} maxWidth="sm" fullWidth>
+     <DialogTitle>Cancel Leave Request</DialogTitle>
+     <DialogContent>
+       <TextField
+         label="Cancellation Reason"
+         value={cancelReason}
+         onChange={(e) => setCancelReason(e.target.value)}
+         multiline
+         rows={4}
+         fullWidth
+         required
+         sx={{ mt: 2 }}
+         placeholder="Please provide a reason for cancelling this leave request"
+       />
+     </DialogContent>
+     <DialogActions>
+       <Button onClick={() => setCancelDialog(false)}>Close</Button>
+       <Button
+         onClick={handleCancelSubmit}
+         variant="contained"
+         color="warning"
+         disabled={cancelMutation.isPending}
+       >
+         {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Leave'}
+       </Button>
+     </DialogActions>
+   </Dialog>
+   ```
+
+2. **`frontend/src/pages/DashboardPage.tsx`** (Lines 744-826, 943-1040):
+   - Employee Recent Leaves section: Center alignment for date/numeric columns, reduced Cancel button height
+   - Manager Pending Team Leaves section: Center alignment and reduced Approve/Reject button heights
+
+3. **`frontend/src/pages/ApprovalsPage.tsx`**:
+   - Center alignment for date, numeric, and action columns
+   - Reduced button heights for all action buttons
+
+#### Button Styling Pattern
+
+All action buttons now follow this consistent pattern for reduced height:
+```typescript
+sx={{
+  color: '#fff !important',
+  backgroundColor: '#d84315 !important', // Color varies by action
+  backgroundImage: 'none !important',
+  py: 0.5,              // Reduced padding-y
+  minHeight: 'auto',    // Allows button to shrink
+  '&:hover': {
+    backgroundColor: '#bf360c !important', // Darker shade
+    backgroundImage: 'none !important',
+  },
+  '&:disabled': {
+    backgroundColor: 'rgba(0, 0, 0, 0.12) !important',
+    color: 'rgba(0, 0, 0, 0.26) !important',
+    backgroundImage: 'none !important',
+  },
+}}
+```
+
+#### Bug Fixes Applied
+
+1. **Syntax Error in LeavesPage.tsx:**
+   - **Issue**: Extra closing brace after `toLocaleDateString()` on line 302
+   - **Error**: `Unexpected token, expected ":" (302:76)`
+   - **Fix**: Removed extra `}` character
+   - **Before**: `? new Date(leave.appliedDate).toLocaleDateString()}`
+   - **After**: `? new Date(leave.appliedDate).toLocaleDateString()`
+
+#### User Experience Improvements
+
+1. **Better Readability:**
+   - Center-aligned date and numeric columns improve visual scanning
+   - Consistent alignment across all data grids
+
+2. **Cleaner Interface:**
+   - Reduced button heights create more compact, professional appearance
+   - Less vertical space wasted on action buttons
+
+3. **Employee Empowerment:**
+   - Employees can now cancel their own leave requests directly from My Leaves page
+   - Clear visual feedback on which leaves can be cancelled
+   - Required cancellation reason for audit trail
+
+4. **Consistent User Experience:**
+   - All data grids now have uniform styling and behavior
+   - Same column alignment rules across Employee, Manager, and Admin views
+
+---
+
+### Approval System Enhancements
 
 **Date:** November 3, 2025
 
@@ -248,6 +649,10 @@ Employee master data (separate from User for HR management).
 - `employeeId` (unique): Employee ID
 - `email` (unique): Employee email
 - `firstName`, `lastName`: Name
+- `gender`: M | F (used for leave type filtering)
+- `phoneNumber`: Contact number
+- `dateOfJoining` (required): Date employee joined the organization
+- `exitDate` (optional): Date employee left the organization
 - `location`, `designation`, `department`: Job details
 - `employmentType`: FTE | FTDC | CONSULTANT
 - `lmsAccess`: EMP | MGR (determines if they can access LMS)
@@ -269,14 +674,16 @@ Defines types of leaves available in the system.
 - `annualAllocation`: Default annual days
 
 **Current Leave Types:**
+- **BL** - Bereavement Leave
 - **CL** - Casual Leave
-- **SL** - Sick Leave
-- **PL** - Privilege Leave
-- **ML** - Maternity Leave
-- **PAT** - Paternity Leave
+- **COMP** - Compensatory Off
 - **LWP** - Leave Without Pay
-- **COMPOFF** - Compensatory Off
+- **ML** - Maternity Leave (visible only to Female employees)
+- **PL** - Privilege Leave
+- **PTL** - Paternity Leave (visible only to Male employees)
 - **PTO** - Paid Time Off
+
+**Note:** Maternity Leave (ML) and Paternity Leave (PTL) are filtered based on employee gender. ML is only visible to employees with Gender = 'F', and PTL is only visible to employees with Gender = 'M'.
 
 #### LeaveBalance
 Tracks leave balances for each user and leave type per year.
@@ -537,8 +944,10 @@ After seeding the database:
 - Leave request submission with attachments
 - Half-day leave support
 - Leave approval workflow
-- Leave cancellation
+- **Leave cancellation by employees** (PENDING/APPROVED leaves with start date >= today)
+- **Cancel dialog with required reason** for audit trail
 - Leave balance tracking per year
+- **Actions column** on all leave data grids for quick access to cancel/approve/reject
 
 ### 4. Leave Balance Management
 - Automatic initialization with 0 balance for new users
@@ -609,7 +1018,9 @@ After seeding the database:
 - Submit leave requests
 - View own leave balance
 - View leave history
-- Cancel pending requests
+- **Cancel own leave requests** (PENDING/APPROVED status, before start date)
+- **Cancel dialog with required reason** for accountability
+- Access to My Leaves page with Actions column
 
 ---
 
@@ -682,6 +1093,45 @@ useEffect(() => {
   }, 500);
   return () => clearTimeout(timer);
 }, [searchInput]);
+```
+
+### Data Grid Layout Guidelines
+
+**Column Alignment:**
+All leave data grids follow consistent alignment rules for improved readability:
+
+**Center-Aligned Columns:**
+- Date columns: Start Date, End Date, Applied On
+- Numeric columns: Days, Total Days
+- Status column: Status chips
+- Action column: Action buttons
+
+**Left-Aligned Columns:**
+- Text columns: Leave Type, Approver, Reason, Employee Name, Employee ID
+- Description fields: Any long-form text content
+
+**Implementation:**
+```typescript
+// Header cells
+<TableCell align="center">Start Date</TableCell>
+<TableCell align="center">Days</TableCell>
+<TableCell>Leave Type</TableCell>  // Left-aligned by default
+
+// Data cells
+<TableCell align="center">
+  {new Date(leave.startDate).toLocaleDateString()}
+</TableCell>
+<TableCell align="center">{leave.totalDays}</TableCell>
+<TableCell>{leave.leaveType?.name}</TableCell>
+```
+
+**Button Height Reduction:**
+All action buttons use reduced height for compact, professional appearance:
+```typescript
+sx={{
+  py: 0.5,              // Reduced vertical padding
+  minHeight: 'auto',    // Allows button to shrink below default minimum
+}}
 ```
 
 ---
@@ -828,7 +1278,10 @@ npm run dev
 
 **Leave Requests:**
 - [ ] Submit leave request
-- [ ] Cancel leave request (employee)
+- [ ] Cancel leave request from Employee My Leaves page (PENDING/APPROVED, before start date)
+- [ ] Verify cancel dialog requires reason
+- [ ] Verify cancel button only shows for cancellable leaves
+- [ ] Verify balance restoration after employee cancellation
 - [ ] Approve leave request (as manager)
 - [ ] Reject leave request (as manager)
 - [ ] Bulk approve multiple leave requests
@@ -838,6 +1291,8 @@ npm run dev
 - [ ] Filter leaves by region (admin only)
 - [ ] Search leaves by employee ID or name
 - [ ] Verify debounced search (no page refresh on typing)
+- [ ] Verify center alignment of date, numeric, and action columns
+- [ ] Verify reduced button heights across all data grids
 
 **Leave Balances:**
 - [ ] View leave balances
@@ -948,6 +1403,35 @@ For questions or support, contact the development team.
 
 ## Changelog
 
+### v2.3.0 (November 5, 2025)
+- **NEW:** Date of Joining field added to Employee Management (mandatory)
+- **NEW:** Exit Date field added to Employee Management (optional)
+- **NEW:** Gender-based leave filtering for Maternity Leave (ML) and Paternity Leave (PTL)
+- **NEW:** ML only visible to Female employees (Gender = 'F')
+- **NEW:** PTL only visible to Male employees (Gender = 'M')
+- **ENHANCEMENT:** Excel import now supports Date of Joining and Exit Date columns
+- **ENHANCEMENT:** Date fields displayed in View Employee modal
+- **ENHANCEMENT:** Date parsing handles both Excel serial numbers and date strings
+- **ENHANCEMENT:** Gender field now included in login response and synced from Employee to User
+- **FIX:** Paternity Leave code corrected from "PAT" to "PTL" (actual database value)
+- **FIX:** Gender field properly synced when creating LMS users from employee records
+- **DOCUMENTATION:** Updated Employee schema with date fields
+- **DOCUMENTATION:** Added database leave type codes reference
+- Date fields positioned between Phone Number and Location in Excel uploads
+
+### v2.2.0 (November 4, 2025)
+- **NEW:** Actions column added to Employee My Leaves page with cancel functionality
+- **NEW:** Employee self-service leave cancellation (PENDING/APPROVED, before start date)
+- **NEW:** Cancel dialog with required reason for audit trail
+- **ENHANCEMENT:** Center alignment for date, numeric, status, and action columns across all data grids
+- **ENHANCEMENT:** Reduced button heights (py: 0.5, minHeight: auto) for cleaner UI
+- **ENHANCEMENT:** Consistent row spacing and improved readability across all tables
+- **FIX:** Syntax error in LeavesPage.tsx (extra closing brace after toLocaleDateString())
+- **DOCUMENTATION:** Added Data Grid Layout Guidelines section
+- **DOCUMENTATION:** Updated Employee role permissions
+- **DOCUMENTATION:** Updated testing checklist with new features
+- Improved user experience with uniform styling across Employee, Manager, and Admin views
+
 ### v2.1.0 (November 3, 2025)
 - **NEW:** Unified approval grid for Admin and Manager roles
 - **NEW:** Bulk approve/reject functionality with always-visible buttons
@@ -980,5 +1464,5 @@ For questions or support, contact the development team.
 
 ---
 
-**Last Updated:** November 3, 2025
-**Version:** 2.1.0
+**Last Updated:** November 5, 2025
+**Version:** 2.3.0

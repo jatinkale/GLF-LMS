@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -29,6 +29,12 @@ import {
   ButtonGroup,
   Card,
   CardContent,
+  MenuItem,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import {
   EventNote,
@@ -45,6 +51,10 @@ import {
   People,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../config/api';
@@ -106,6 +116,19 @@ export default function DashboardPage() {
   const [cancelDialog, setCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
+  // Apply Leave Dialog States
+  const [openApplyDialog, setOpenApplyDialog] = useState(false);
+  const [dialogKey, setDialogKey] = useState(0);
+  const [formData, setFormData] = useState({
+    leaveTypeId: '',
+    startDate: dayjs(),
+    endDate: dayjs(),
+    reason: '',
+    startDayType: 'full' as 'full' | 'first-half' | 'second-half',
+    endDayType: 'full' as 'full' | 'first-half' | 'second-half',
+  });
+  const [calculatedDays, setCalculatedDays] = useState<number>(0);
+
   const queryClient = useQueryClient();
 
   // Fetch real leave balances (not for admin)
@@ -119,10 +142,16 @@ export default function DashboardPage() {
     retry: 2,
   });
 
-  // Fetch recent leaves
+  // Fetch recent leaves for employees/managers, or all leaves for admin stats
   const { data: leaves, isLoading: leavesLoading, error: leavesError } = useQuery({
     queryKey: ['recent-leaves'],
     queryFn: async () => {
+      // For admin, fetch all leaves to calculate accurate stats
+      if (isAdmin) {
+        const response = await api.get('/admin/all-leaves');
+        return response.data;
+      }
+      // For employees/managers, fetch only recent 10
       const response = await api.get('/leaves?limit=10');
       return response.data;
     },
@@ -153,6 +182,24 @@ export default function DashboardPage() {
     retry: 2,
   });
 
+  // Fetch leave types for apply leave dialog
+  const { data: leaveTypesData } = useQuery({
+    queryKey: ['leave-types'],
+    queryFn: async () => {
+      const response = await api.get('/leave-balances/leave-types');
+      return response.data.data;
+    },
+    enabled: !isAdmin,
+  });
+
+  // Filter leave types based on gender for ML/PTL leaves
+  const leaveTypes = (leaveTypesData || []).filter((type: any) => {
+    const leaveCode = type.leaveTypeCode;
+    if (leaveCode === 'ML' && user?.gender !== 'F') return false;
+    if (leaveCode === 'PTL' && user?.gender !== 'M') return false;
+    return true;
+  });
+
   // Calculate team stats for managers
   const teamStats = {
     totalMembers: teamMembersCount || 0,
@@ -160,6 +207,61 @@ export default function DashboardPage() {
       ? pendingTeamLeaves.length
       : 0,
   };
+
+  // Calculate working days excluding weekends
+  const calculateWorkingDays = (
+    start: Dayjs,
+    end: Dayjs,
+    startType: string,
+    endType: string
+  ): number => {
+    let workingDays = 0;
+    let currentDate = start.clone();
+
+    while (currentDate.isBefore(end) || currentDate.isSame(end, 'day')) {
+      const dayOfWeek = currentDate.day();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        if (currentDate.isSame(start, 'day')) {
+          workingDays += startType === 'full' ? 1 : 0.5;
+        } else if (currentDate.isSame(end, 'day') && !currentDate.isSame(start, 'day')) {
+          workingDays += endType === 'full' ? 1 : 0.5;
+        } else {
+          workingDays += 1;
+        }
+      }
+      currentDate = currentDate.add(1, 'day');
+    }
+    return workingDays;
+  };
+
+  // Recalculate days whenever dates or day types change
+  useEffect(() => {
+    const days = calculateWorkingDays(
+      formData.startDate,
+      formData.endDate,
+      formData.startDayType,
+      formData.endDayType
+    );
+    setCalculatedDays(days);
+  }, [formData.startDate, formData.endDate, formData.startDayType, formData.endDayType]);
+
+  // Create leave mutation
+  const createLeaveMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/leaves', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Leave request submitted successfully!');
+      queryClient.invalidateQueries({ queryKey: ['leaves'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-leaves'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
+      handleCloseApplyDialog();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to submit leave request');
+    },
+  });
 
   // Approve mutation
   const approveMutation = useMutation({
@@ -205,7 +307,12 @@ export default function DashboardPage() {
     },
     onSuccess: () => {
       toast.success('Leave request cancelled successfully');
-      refetchTeamLeaves();
+      // Refetch appropriate data based on user role
+      if (isManager && !isAdmin) {
+        refetchTeamLeaves();
+      }
+      // Refetch employee's own leaves (works for both employees and managers)
+      queryClient.invalidateQueries({ queryKey: ['recent-leaves'] });
       setCancelDialog(false);
       setCancelReason('');
     },
@@ -255,12 +362,56 @@ export default function DashboardPage() {
     );
   }
 
-  const totalRequests = leaves?.data?.length || 0;
-  const approvedCount = leaves?.data?.filter((l: any) => l.status === 'APPROVED').length || 0;
-  const pendingCount = leaves?.data?.filter((l: any) => l.status === 'PENDING').length || 0;
-  const rejectedCount = leaves?.data?.filter((l: any) => l.status === 'REJECTED').length || 0;
+  // Calculate stats - for admin, show accurate YTD counts
+  const currentYear = new Date().getFullYear();
+  const yearStart = new Date(currentYear, 0, 1); // January 1st of current year
 
-  const balances = Array.isArray(balancesData) ? balancesData : [];
+  const allLeaves = leaves?.data || [];
+
+  // Total pending requests (current status)
+  const pendingCount = allLeaves.filter((l: any) => l.status === 'PENDING').length || 0;
+
+  // Total approved requests from January 1st till date
+  const approvedCount = allLeaves.filter((l: any) => {
+    if (l.status !== 'APPROVED') return false;
+    // Check if created this year
+    const createdDate = new Date(l.createdAt);
+    return createdDate >= yearStart;
+  }).length || 0;
+
+  // Total rejected requests from January 1st till date
+  const rejectedCount = allLeaves.filter((l: any) => {
+    if (l.status !== 'REJECTED') return false;
+    // Check if created this year
+    const createdDate = new Date(l.createdAt);
+    return createdDate >= yearStart;
+  }).length || 0;
+
+  const totalRequests = allLeaves.length || 0;
+
+  // Filter balances based on gender for ML/PTL leaves and hide LWP
+  const allBalances = Array.isArray(balancesData) ? balancesData : [];
+  const balances = allBalances.filter((balance: any) => {
+    const leaveCode = balance.leaveType?.leaveTypeCode;
+
+    // Hide Leave Without Pay (LWP)
+    if (leaveCode === 'LWP') {
+      return false;
+    }
+
+    // Hide Maternity Leave (ML) for non-female employees
+    if (leaveCode === 'ML' && user?.gender !== 'F') {
+      return false;
+    }
+
+    // Hide Paternity Leave (PTL) for non-male employees
+    if (leaveCode === 'PTL' && user?.gender !== 'M') {
+      return false;
+    }
+
+    return true;
+  });
+
   const totalAllocated = balances.reduce((sum: number, b: any) => sum + b.allocated, 0);
   const totalUsed = balances.reduce((sum: number, b: any) => sum + b.used, 0);
   const totalAvailable = balances.reduce((sum: number, b: any) => sum + b.available, 0);
@@ -314,11 +465,75 @@ export default function DashboardPage() {
   };
 
   const canCancelLeave = (leave: any) => {
-    if (leave.status !== 'APPROVED') return false;
+    // Allow cancellation for PENDING and APPROVED leaves only
+    if (!['PENDING', 'APPROVED'].includes(leave.status)) return false;
+    // Check if start date has not elapsed
     const startDate = new Date(leave.startDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return startDate >= today;
+  };
+
+  // Apply Leave Dialog Handlers
+  const resetApplyForm = () => {
+    setFormData({
+      leaveTypeId: '',
+      startDate: dayjs(),
+      endDate: dayjs(),
+      reason: '',
+      startDayType: 'full',
+      endDayType: 'full',
+    });
+    setCalculatedDays(0);
+  };
+
+  const handleOpenApplyDialog = () => {
+    resetApplyForm();
+    setDialogKey(prev => prev + 1);
+    setOpenApplyDialog(true);
+  };
+
+  const handleCloseApplyDialog = () => {
+    resetApplyForm();
+    setOpenApplyDialog(false);
+  };
+
+  const handleSubmitApplyLeave = () => {
+    if (!formData.leaveTypeId || !formData.reason.trim()) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    if (calculatedDays <= 0) {
+      toast.error('Invalid date selection. Please check your dates.');
+      return;
+    }
+
+    const isSameDay = formData.startDate.isSame(formData.endDate, 'day');
+    const isHalfDay = isSameDay && (formData.startDayType !== 'full' || formData.endDayType !== 'full');
+    const halfDayType = isHalfDay ? (formData.startDayType !== 'full' ? formData.startDayType : formData.endDayType) : null;
+
+    createLeaveMutation.mutate({
+      leaveTypeCode: formData.leaveTypeId,
+      startDate: formData.startDate.toISOString(),
+      endDate: formData.endDate.toISOString(),
+      reason: formData.reason,
+      isHalfDay: isHalfDay,
+      halfDayType: halfDayType,
+      totalDays: calculatedDays,
+      startDayType: formData.startDayType,
+      endDayType: formData.endDayType,
+    });
+  };
+
+  // Handle refresh all data
+  const handleRefreshAll = () => {
+    refetchBalances();
+    queryClient.invalidateQueries({ queryKey: ['recent-leaves'] });
+    if (isManager && !isAdmin) {
+      refetchTeamLeaves();
+    }
+    toast.success('Data refreshed successfully!');
   };
 
   const getStatusColor = (status: string) => {
@@ -452,9 +667,9 @@ export default function DashboardPage() {
             <EnhancedStatCard
               title="Total Pending Requests"
               value={pendingCount}
-              subtitle="Awaiting approval"
+              subtitle="Current pending count"
               icon={<HourglassEmpty />}
-              gradientType="pink"
+              gradientType="orange"
               delay={0}
             />
           </Grid>
@@ -462,7 +677,7 @@ export default function DashboardPage() {
             <EnhancedStatCard
               title="Total Approved Requests YTD"
               value={approvedCount}
-              subtitle="Year to date"
+              subtitle={`From Jan ${currentYear} till date`}
               icon={<CheckCircle />}
               gradientType="green"
               delay={0.1}
@@ -472,7 +687,7 @@ export default function DashboardPage() {
             <EnhancedStatCard
               title="Total Rejected Requests YTD"
               value={rejectedCount}
-              subtitle="Year to date"
+              subtitle={`From Jan ${currentYear} till date`}
               icon={<Cancel />}
               gradientType="red"
               delay={0.2}
@@ -668,10 +883,10 @@ export default function DashboardPage() {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <GradientButton gradientType="green" startIcon={<Add />} onClick={() => navigate('/leaves')}>
+          <GradientButton gradientType="green" startIcon={<Add />} onClick={handleOpenApplyDialog}>
             Apply Leaves
           </GradientButton>
-          <GradientButton gradientType="secondary" startIcon={<Refresh />} onClick={() => refetchBalances()}>
+          <GradientButton gradientType="secondary" startIcon={<Refresh />} onClick={handleRefreshAll}>
             Refresh
           </GradientButton>
         </Box>
@@ -683,9 +898,9 @@ export default function DashboardPage() {
         Your Leave Balances
       </Typography>
 
-      <Grid container spacing={2} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         {/* Total Leave Balance Card */}
-        <Grid item xs={12} sm={6} md={4} lg={1.71}>
+        <Grid item xs={12} sm={6} md={4} lg={2.4}>
           <EnhancedStatCard
             title="Total Balance"
             value={totalAvailable}
@@ -699,7 +914,7 @@ export default function DashboardPage() {
 
         {/* Individual Leave Type Cards - Show all (up to 6) */}
         {balances.slice(0, 6).map((balance: any, index: number) => (
-          <Grid item xs={12} sm={6} md={4} lg={1.71} key={balance.leaveType.leaveTypeCode}>
+          <Grid item xs={12} sm={6} md={4} lg={2.4} key={balance.leaveType.leaveTypeCode}>
             <EnhancedStatCard
               title={balance.leaveType.name}
               value={balance.available || 0}
@@ -720,90 +935,115 @@ export default function DashboardPage() {
         ))}
       </Grid>
 
-      <Grid container spacing={3}>
-        {/* Enhanced Leave Balance */}
-        <Grid item xs={12} md={6}>
-          <EnhancedLeaveBalance balances={balances} onRefresh={refetchBalances} />
-        </Grid>
+      {/* My Leave Requests Grid */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+            My Leave Requests
+          </Typography>
 
-        {/* Recent Leave Activity */}
-        <Grid item xs={12} md={6}>
-          <GlassCard sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                Recent Leave Activity
+          {leavesLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : leaves?.data && leaves.data.length > 0 ? (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Leave Type</TableCell>
+                    <TableCell align="center">Start Date</TableCell>
+                    <TableCell align="center">End Date</TableCell>
+                    <TableCell align="center">Days</TableCell>
+                    <TableCell align="center">Applied On</TableCell>
+                    <TableCell>Approver</TableCell>
+                    <TableCell>Reason</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                    <TableCell align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {leaves.data.map((leave: any) => {
+                    const canCancel = canCancelLeave(leave);
+                    return (
+                      <TableRow key={leave.id}>
+                        <TableCell>{leave.leaveType?.name}</TableCell>
+                        <TableCell align="center">
+                          {new Date(leave.startDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell align="center">
+                          {new Date(leave.endDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell align="center">{leave.totalDays}</TableCell>
+                        <TableCell align="center">
+                          {leave.appliedDate
+                            ? new Date(leave.appliedDate).toLocaleDateString()
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {leave.user?.manager
+                            ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {leave.reason.substring(0, 30)}
+                          {leave.reason.length > 30 && '...'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={leave.status}
+                            size="small"
+                            {...getStatusColor(leave.status)}
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          {canCancel ? (
+                            <Button
+                              size="small"
+                              startIcon={<Cancel />}
+                              onClick={() => handleCancelClick(leave.id)}
+                              disabled={cancelMutation.isPending}
+                              sx={{
+                                color: '#fff !important',
+                                backgroundColor: '#d84315 !important',
+                                backgroundImage: 'none !important',
+                                py: 0.5,
+                                minHeight: 'auto',
+                                '&:hover': {
+                                  backgroundColor: '#bf360c !important',
+                                  backgroundImage: 'none !important',
+                                },
+                                '&:disabled': {
+                                  backgroundColor: 'rgba(0, 0, 0, 0.12) !important',
+                                  color: 'rgba(0, 0, 0, 0.26) !important',
+                                  backgroundImage: 'none !important',
+                                },
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          ) : (
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              -
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <EventNote sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.3 }} />
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                No leave requests found
               </Typography>
             </Box>
-
-            {leaves?.data?.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 6 }}>
-                <CalendarToday sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.3 }} />
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  No recent activity
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1 }}>
-                  Your leave history will appear here
-                </Typography>
-              </Box>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {leaves?.data?.slice(0, 5).map((leave: any, index: number) => (
-                  <Box
-                    key={leave.id}
-                    sx={{
-                      p: 2,
-                      background: alpha('#f5f7fa', 0.5),
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: alpha('#667eea', 0.1),
-                      transition: 'all 0.3s',
-                      animation: `slideIn 0.4s ease-out ${index * 0.05}s both`,
-                      '@keyframes slideIn': {
-                        '0%': { opacity: 0, transform: 'translateX(20px)' },
-                        '100%': { opacity: 1, transform: 'translateX(0)' },
-                      },
-                      '&:hover': {
-                        borderColor: alpha('#667eea', 0.3),
-                        transform: 'translateX(-4px)',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-                      },
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                          {leave.leaveType?.name || 'Unknown Type'}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                          {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
-                          {leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
-                        </Typography>
-                      </Box>
-                      <Chip
-                        label={leave.status}
-                        size="small"
-                        sx={{
-                          background:
-                            leave.status === 'APPROVED'
-                              ? gradients.green
-                              : leave.status === 'PENDING'
-                              ? gradients.orange
-                              : gradients.red,
-                          color: '#fff',
-                          fontWeight: 600,
-                          fontSize: '0.7rem',
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </GlassCard>
-        </Grid>
-      </Grid>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Team Management Section - Only for Managers */}
       {isManager && (
@@ -913,11 +1153,13 @@ export default function DashboardPage() {
                         <TableCell>Employee ID</TableCell>
                         <TableCell>Employee</TableCell>
                         <TableCell>Leave Type</TableCell>
-                        <TableCell>Start Date</TableCell>
-                        <TableCell>End Date</TableCell>
-                        <TableCell>Days</TableCell>
+                        <TableCell align="center">Start Date</TableCell>
+                        <TableCell align="center">End Date</TableCell>
+                        <TableCell align="center">Days</TableCell>
+                        <TableCell align="center">Applied On</TableCell>
+                        <TableCell>Approver</TableCell>
                         <TableCell>Reason</TableCell>
-                        <TableCell>Actions</TableCell>
+                        <TableCell align="center">Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -928,18 +1170,28 @@ export default function DashboardPage() {
                             {leave.user.firstName} {leave.user.lastName}
                           </TableCell>
                           <TableCell>{leave.leaveType.name}</TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             {new Date(leave.startDate).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             {new Date(leave.endDate).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{leave.totalDays}</TableCell>
+                          <TableCell align="center">{leave.totalDays}</TableCell>
+                          <TableCell align="center">
+                            {leave.appliedDate
+                              ? new Date(leave.appliedDate).toLocaleDateString()
+                              : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            {leave.user?.manager
+                              ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
+                              : 'N/A'}
+                          </TableCell>
                           <TableCell>
                             {leave.reason.substring(0, 30)}
                             {leave.reason.length > 30 && '...'}
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             <ButtonGroup size="small">
                               <Button
                                 startIcon={<CheckCircle />}
@@ -949,6 +1201,8 @@ export default function DashboardPage() {
                                   color: '#fff !important',
                                   backgroundColor: '#11998e !important',
                                   backgroundImage: 'none !important',
+                                  py: 0.5,
+                                  minHeight: 'auto',
                                   '&:hover': {
                                     backgroundColor: '#00695c !important',
                                     backgroundImage: 'none !important',
@@ -970,6 +1224,8 @@ export default function DashboardPage() {
                                   color: '#fff !important',
                                   backgroundColor: '#f857a6 !important',
                                   backgroundImage: 'none !important',
+                                  py: 0.5,
+                                  minHeight: 'auto',
                                   '&:hover': {
                                     backgroundColor: '#c62828 !important',
                                     backgroundImage: 'none !important',
@@ -1055,6 +1311,110 @@ export default function DashboardPage() {
             disabled={cancelMutation.isPending}
           >
             {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Leave'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Apply Leave Dialog */}
+      <Dialog open={openApplyDialog} onClose={handleCloseApplyDialog} maxWidth="md" fullWidth>
+        <DialogTitle>Apply Leaves</DialogTitle>
+        <DialogContent key={dialogKey}>
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2 }}>
+              <TextField
+                select
+                label="Leave Type"
+                value={formData.leaveTypeId}
+                onChange={(e) => setFormData({ ...formData, leaveTypeId: e.target.value })}
+                fullWidth
+                required
+              >
+                {leaveTypes?.map((type: any) => (
+                  <MenuItem key={type.leaveTypeCode} value={type.leaveTypeCode}>
+                    {type.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <DatePicker
+                  label="Start Date"
+                  value={formData.startDate}
+                  onChange={(date) => setFormData({ ...formData, startDate: date || dayjs() })}
+                  slotProps={{ textField: { fullWidth: true, required: true } }}
+                />
+
+                <DatePicker
+                  label="End Date"
+                  value={formData.endDate}
+                  onChange={(date) => setFormData({ ...formData, endDate: date || dayjs() })}
+                  minDate={formData.startDate}
+                  slotProps={{ textField: { fullWidth: true, required: true } }}
+                />
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 3 }}>
+                <FormControl component="fieldset" sx={{ flex: 1 }}>
+                  <FormLabel component="legend" sx={{ mb: 1, fontSize: '0.9rem' }}>
+                    Start Date Type
+                  </FormLabel>
+                  <RadioGroup
+                    row
+                    value={formData.startDayType}
+                    onChange={(e) => setFormData({ ...formData, startDayType: e.target.value as any })}
+                  >
+                    <FormControlLabel value="full" control={<Radio size="small" />} label="Full Day" />
+                    <FormControlLabel value="first-half" control={<Radio size="small" />} label="First Half" />
+                    <FormControlLabel value="second-half" control={<Radio size="small" />} label="Second Half" />
+                  </RadioGroup>
+                </FormControl>
+
+                <FormControl component="fieldset" sx={{ flex: 1 }}>
+                  <FormLabel component="legend" sx={{ mb: 1, fontSize: '0.9rem' }}>
+                    End Date Type
+                  </FormLabel>
+                  <RadioGroup
+                    row
+                    value={formData.endDayType}
+                    onChange={(e) => setFormData({ ...formData, endDayType: e.target.value as any })}
+                  >
+                    <FormControlLabel value="full" control={<Radio size="small" />} label="Full Day" />
+                    <FormControlLabel value="first-half" control={<Radio size="small" />} label="First Half" />
+                    <FormControlLabel value="second-half" control={<Radio size="small" />} label="Second Half" />
+                  </RadioGroup>
+                </FormControl>
+              </Box>
+
+              <Alert severity="info" sx={{ py: 0.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Total Working Days: {calculatedDays} {calculatedDays === 1 ? 'day' : 'days'}
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                  Weekends (Saturday & Sunday) are excluded from the calculation
+                </Typography>
+              </Alert>
+
+              <TextField
+                label="Reason"
+                value={formData.reason}
+                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                multiline
+                rows={4}
+                fullWidth
+                required
+                placeholder="Please provide a reason for your leave request"
+              />
+            </Box>
+          </LocalizationProvider>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseApplyDialog}>Cancel</Button>
+          <Button
+            onClick={handleSubmitApplyLeave}
+            variant="contained"
+            disabled={createLeaveMutation.isPending}
+          >
+            {createLeaveMutation.isPending ? 'Submitting...' : 'Submit'}
           </Button>
         </DialogActions>
       </Dialog>

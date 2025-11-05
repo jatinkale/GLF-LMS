@@ -8,8 +8,11 @@ interface EmployeeData {
   employeeId: string;
   firstName: string;
   lastName: string;
+  gender?: string;
   email: string;
   phoneNumber?: string;
+  dateOfJoining: Date;
+  exitDate?: Date;
   location?: string;
   designation?: string;
   department?: string;
@@ -99,8 +102,11 @@ export class EmployeeService {
           employeeId: data.employeeId,
           firstName: data.firstName,
           lastName: data.lastName,
+          gender: data.gender || null,
           email: data.email,
           phoneNumber: data.phoneNumber || null,
+          dateOfJoining: data.dateOfJoining,
+          exitDate: data.exitDate || null,
           location: data.location || null,
           designation: data.designation || null,
           department: data.department || null,
@@ -148,8 +154,11 @@ export class EmployeeService {
         data: {
           ...(data.firstName && { firstName: data.firstName }),
           ...(data.lastName && { lastName: data.lastName }),
+          ...(data.gender !== undefined && { gender: data.gender }),
           ...(data.email && { email: data.email }),
           ...(data.phoneNumber !== undefined && { phoneNumber: data.phoneNumber }),
+          ...(data.dateOfJoining && { dateOfJoining: data.dateOfJoining }),
+          ...(data.exitDate !== undefined && { exitDate: data.exitDate }),
           ...(data.location !== undefined && { location: data.location }),
           ...(data.designation !== undefined && { designation: data.designation }),
           ...(data.department !== undefined && { department: data.department }),
@@ -199,6 +208,10 @@ export class EmployeeService {
 
           if (data.firstName) userUpdateData.firstName = data.firstName;
           if (data.lastName) userUpdateData.lastName = data.lastName;
+          if (data.gender !== undefined) {
+            // Store gender as-is (M or F)
+            userUpdateData.gender = data.gender || null;
+          }
           if (data.designation !== undefined) userUpdateData.designation = data.designation;
           if (data.employmentType !== undefined) userUpdateData.employmentType = data.employmentType || 'FTE';
           if (data.phoneNumber !== undefined) userUpdateData.phoneNumber = data.phoneNumber;
@@ -296,8 +309,11 @@ export class EmployeeService {
         'Employee ID',
         'First Name',
         'Last Name',
+        'Gender',
         'Email ID',
         'Phone Number',
+        'Date of Joining',
+        'Exit Date',
         'Location',
         'Designation',
         'Department',
@@ -340,6 +356,10 @@ export class EmployeeService {
 
         if (!row['Email ID'] || row['Email ID'].toString().trim() === '') {
           errors.push(`Row ${rowNumber}: Email ID is mandatory`);
+        }
+
+        if (!row['Date of Joining'] || row['Date of Joining'].toString().trim() === '') {
+          errors.push(`Row ${rowNumber}: Date of Joining is mandatory`);
         }
 
         if (!row['Reporting Manager'] || row['Reporting Manager'].toString().trim() === '') {
@@ -391,12 +411,37 @@ export class EmployeeService {
             ? row['Employment Type'].toString().trim().toUpperCase() as 'FTE' | 'FTDC' | 'CONSULTANT'
             : undefined;
 
+          // Parse Date of Joining (mandatory)
+          let dateOfJoining: Date;
+          if (typeof row['Date of Joining'] === 'number') {
+            // Excel serial date number
+            dateOfJoining = xlsx.SSF.parse_date_code(row['Date of Joining']);
+            dateOfJoining = new Date(dateOfJoining.y, dateOfJoining.m - 1, dateOfJoining.d);
+          } else {
+            dateOfJoining = new Date(row['Date of Joining']);
+          }
+
+          // Parse Exit Date (optional)
+          let exitDate: Date | undefined;
+          if (row['Exit Date'] && row['Exit Date'].toString().trim() !== '') {
+            if (typeof row['Exit Date'] === 'number') {
+              // Excel serial date number
+              const parsedDate = xlsx.SSF.parse_date_code(row['Exit Date']);
+              exitDate = new Date(parsedDate.y, parsedDate.m - 1, parsedDate.d);
+            } else {
+              exitDate = new Date(row['Exit Date']);
+            }
+          }
+
           data.push({
             employeeId: row['Employee ID'].toString().trim(),
             firstName: row['First Name'].toString().trim(),
             lastName: row['Last Name'].toString().trim(),
+            gender: row['Gender'] ? row['Gender'].toString().trim() : undefined,
             email: row['Email ID'].toString().trim().toLowerCase(),
             phoneNumber: row['Phone Number'] ? row['Phone Number'].toString().trim() : undefined,
+            dateOfJoining: dateOfJoining,
+            exitDate: exitDate,
             location: row['Location'] ? row['Location'].toString().trim() : undefined,
             designation: row['Designation'] ? row['Designation'].toString().trim() : undefined,
             department: row['Department'] ? row['Department'].toString().trim() : undefined,
@@ -460,8 +505,11 @@ export class EmployeeService {
           await this.updateEmployee(existingEmployee.employeeId, {
             firstName: employeeData.firstName,
             lastName: employeeData.lastName,
+            gender: employeeData.gender,
             email: employeeData.email,
             phoneNumber: employeeData.phoneNumber,
+            dateOfJoining: employeeData.dateOfJoining,
+            exitDate: employeeData.exitDate,
             location: employeeData.location,
             designation: employeeData.designation,
             department: employeeData.department,
@@ -479,8 +527,11 @@ export class EmployeeService {
               employeeId: employeeData.employeeId,
               firstName: employeeData.firstName,
               lastName: employeeData.lastName,
+              gender: employeeData.gender || null,
               email: employeeData.email,
               phoneNumber: employeeData.phoneNumber || null,
+              dateOfJoining: employeeData.dateOfJoining,
+              exitDate: employeeData.exitDate || null,
               location: employeeData.location || null,
               designation: employeeData.designation || null,
               department: employeeData.department || null,
@@ -558,6 +609,7 @@ export class EmployeeService {
               password: defaultPassword,
               firstName: employee.firstName,
               lastName: employee.lastName,
+              gender: employee.gender || null,
               role: role,
               isActive: employee.isActive,
               designation: employee.designation,
@@ -575,6 +627,7 @@ export class EmployeeService {
               password: defaultPassword,
               firstName: employee.firstName,
               lastName: employee.lastName,
+              gender: employee.gender || null,
               employeeId: employee.employeeId,
               role: role,
               designation: employee.designation,

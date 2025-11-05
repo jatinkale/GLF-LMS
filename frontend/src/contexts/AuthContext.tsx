@@ -8,6 +8,7 @@ interface User {
   firstName: string;
   lastName: string;
   employeeId: string;
+  gender?: string;
   role: 'ADMIN' | 'HR' | 'MANAGER' | 'EMPLOYEE';
   department?: {
     id: string;

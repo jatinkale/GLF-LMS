@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del backendcheck-employee-manager.js)"
+      "Bash(del backendcheck-employee-manager.js)",
+      "Bash(npx prisma studio:*)",
+      "Bash(del:*)",
+      "Bash(move check-emp003.js backend )",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"test-login.ps1\")",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []

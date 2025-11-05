@@ -176,7 +176,7 @@ router.get('/employee-leaves/:employeeId', async (req: Request, res: Response) =
 // Process leaves for a specific region, employment type, and month-year
 router.post('/leave-policy/process', async (req: Request, res: Response) => {
   try {
-    const { region, employmentType, month, year, casualLeave, privilegeLeave } = req.body;
+    const { region, employmentType, month, year, casualLeave, privilegeLeave, plannedTimeOff, bereavementLeave } = req.body;
 
     // Validation
     if (!region || !employmentType || !month || !year) {
@@ -186,7 +186,7 @@ router.post('/leave-policy/process', async (req: Request, res: Response) => {
       });
     }
 
-    if (casualLeave === undefined && privilegeLeave === undefined) {
+    if (casualLeave === undefined && privilegeLeave === undefined && plannedTimeOff === undefined && bereavementLeave === undefined) {
       return res.status(400).json({
         success: false,
         message: 'At least one leave type value is required',
@@ -201,8 +201,10 @@ router.post('/leave-policy/process', async (req: Request, res: Response) => {
       employmentType: employmentType as EmployeeType,
       month: parseInt(month),
       year: parseInt(year),
-      casualLeave: parseFloat(casualLeave) || 0,
-      privilegeLeave: parseFloat(privilegeLeave) || 0,
+      casualLeave: casualLeave !== undefined ? parseFloat(casualLeave) : undefined,
+      privilegeLeave: privilegeLeave !== undefined ? parseFloat(privilegeLeave) : undefined,
+      plannedTimeOff: plannedTimeOff !== undefined ? parseFloat(plannedTimeOff) : undefined,
+      bereavementLeave: bereavementLeave !== undefined ? parseFloat(bereavementLeave) : undefined,
       processedBy: userEmail,
     });
 
@@ -270,6 +272,189 @@ router.post('/leave-policy/check-exists', async (req: Request, res: Response) =>
   }
 });
 
+// Search employees for special leave processing
+router.get('/search-employees', async (req: Request, res: Response) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || typeof query !== 'string' || query.length < 2) {
+      return res.json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const searchTerm = query.trim();
+
+    // Search in User table for LMS users
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { employeeId: { contains: searchTerm } },
+          { firstName: { contains: searchTerm } },
+          { lastName: { contains: searchTerm } },
+          { email: { contains: searchTerm } },
+        ],
+      },
+      select: {
+        employeeId: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        gender: true,
+        region: true,
+        manager: {
+          select: {
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      take: 10, // Limit to 10 results
+    });
+
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error: any) {
+    console.error('Error searching employees:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to search employees',
+    });
+  }
+});
+
+// Process special leave for a specific employee
+router.post('/leave-policy/process-special', async (req: Request, res: Response) => {
+  try {
+    const { employeeId, leaveTypeCode, numberOfLeaves, comments } = req.body;
+
+    // Validation
+    if (!employeeId || !leaveTypeCode || !numberOfLeaves) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employee ID, Leave Type, and Number of Leaves are required',
+      });
+    }
+
+    if (!comments || !comments.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Comments are required',
+      });
+    }
+
+    const leaves = parseFloat(numberOfLeaves);
+    if (leaves <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Number of leaves must be greater than 0',
+      });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { employeeId },
+      select: {
+        employeeId: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+        region: true,
+        employmentType: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee not found',
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employee is not active',
+      });
+    }
+
+    const currentYear = new Date().getFullYear();
+
+    // Check if leave balance exists
+    const existingBalance = await prisma.leaveBalance.findFirst({
+      where: {
+        employeeId: employeeId,
+        leaveTypeCode: leaveTypeCode,
+        year: currentYear,
+      },
+    });
+
+    if (existingBalance) {
+      // Update existing balance
+      await prisma.leaveBalance.update({
+        where: { id: existingBalance.id },
+        data: {
+          allocated: { increment: leaves },
+          available: { increment: leaves },
+        },
+      });
+    } else {
+      // Create new balance
+      await prisma.leaveBalance.create({
+        data: {
+          employeeId: employeeId,
+          leaveTypeCode: leaveTypeCode,
+          year: currentYear,
+          allocated: leaves,
+          used: 0,
+          pending: 0,
+          available: leaves,
+          carriedForward: 0,
+          expired: 0,
+          encashed: 0,
+        },
+      });
+    }
+
+    // Record in history - use employee's actual region and employment type
+    const userEmail = (req as any).user?.email || 'Unknown';
+    await prisma.leaveProcessHistory.create({
+      data: {
+        region: user.region || 'IND', // Use employee's region, default to IND if null
+        employmentType: user.employmentType || 'FTE', // Use employee's employment type
+        processMonth: new Date().getMonth() + 1,
+        processYear: new Date().getFullYear(),
+        leaveTypeCode: leaveTypeCode,
+        daysProcessed: leaves,
+        employeesCount: 1,
+        processedBy: userEmail,
+        comments: comments.trim(),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully processed ${leaves} days of ${leaveTypeCode} for ${user.firstName} ${user.lastName}`,
+      data: {
+        employeeId,
+        leaveTypeCode,
+        numberOfLeaves: leaves,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error processing special leave:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to process special leave',
+    });
+  }
+});
+
 // Get all leave requests with filters (for admin approvals page)
 router.get('/all-leaves', async (req: Request, res: Response) => {
   try {
@@ -313,6 +498,13 @@ router.get('/all-leaves', async (req: Request, res: Response) => {
             lastName: true,
             email: true,
             region: true,
+            manager: {
+              select: {
+                firstName: true,
+                lastName: true,
+                employeeId: true,
+              },
+            },
           },
         },
         leaveType: {

@@ -472,6 +472,13 @@ export class ApprovalService {
               lastName: true,
               email: true,
               employeeId: true,
+              manager: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  employeeId: true,
+                },
+              },
               department: {
                 select: {
                   name: true,

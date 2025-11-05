@@ -313,6 +313,13 @@ export class LeaveService {
               lastName: true,
               email: true,
               employeeId: true,
+              manager: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  employeeId: true,
+                },
+              },
             },
           },
           approvals: {

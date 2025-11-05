@@ -115,7 +115,7 @@ model User {
   firstName            String
   lastName             String
   role                 Role         @default(EMPLOYEE)
-  gender               Gender?
+  gender               String?
   dateOfBirth          DateTime?
   dateOfJoining        DateTime
   phoneNumber          String?
@@ -549,8 +549,11 @@ model Employee {
   employeeId         String        @id
   firstName          String
   lastName           String
+  gender             String?
   email              String        @unique
   phoneNumber        String?
+  dateOfJoining      DateTime      @default(now())
+  exitDate           DateTime?
   location           String?
   designation        String?
   department         String?
@@ -578,6 +581,7 @@ model LeaveProcessHistory {
   daysProcessed  Float
   employeesCount Int
   processedBy    String
+  comments       String?      @db.Text
   processedAt    DateTime     @default(now())
 
   @@index([region, employmentType, processMonth, processYear])

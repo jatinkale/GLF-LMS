@@ -26,7 +26,7 @@ export default function EnhancedLeaveBalance({ balances, onRefresh }: EnhancedLe
       SL: gradients.pink,
       PL: gradients.green,
       ML: gradients.purple,
-      PAT: gradients.orange,
+      PTL: gradients.orange,
     };
     return gradientMap[code] || gradients.primary;
   };
@@ -37,7 +37,7 @@ export default function EnhancedLeaveBalance({ balances, onRefresh }: EnhancedLe
       SL: '#f093fb',
       PL: '#11998e',
       ML: '#667eea',
-      PAT: '#fa709a',
+      PTL: '#fa709a',
     };
     return colorMap[code] || '#667eea';
   };

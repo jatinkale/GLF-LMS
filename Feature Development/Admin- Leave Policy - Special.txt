@@ -1,0 +1,31 @@
+Admin- Leave Policy - Special
+
+Create a section called "Special Leaves" below India and US sections.
+
+Show these fields:
+
+Admin User should be able to search for an employee from LMS Users using Employee Name or Employee ID.
+Show the search results as a dropdown on the search box itself.
+User selects one employee name and clicks "Select" button.
+
+Based on the name selected show and populate these fields as readonly on the screen:
+
+Employee ID
+Employee Name
+Gender
+Location
+Reporting Manager Name
+Reporting Manager ID
+
+Below this information show:
+
+1. Drop down with Leave Types: Compensatory Off (COMP), Maternity Leave (ML) (only if gender is F), Paternity Leave (PL) (Only if gender is M)
+2. Number of Leaves: text box that accepts numbers, decimals allowed
+3. "Process Leaves" button
+
+On selecting the employee, selecting a leave type, entering a number and clicking Process leaves use this logic:
+1. Show a user confirmation screen
+2. Add to the respective leave balance of the selected employee
+3. Add to the Process History
+4. Clear the preselected Values. Keep showing the selected employee details until a new employee is searched.
+5. Reset everything including the search and selected employee is the user navigates away from the "Leave Policy" screen.

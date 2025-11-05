@@ -44,8 +44,11 @@ interface Employee {
   employeeId: string;
   firstName: string;
   lastName: string;
+  gender?: string;
   email: string;
   phoneNumber?: string;
+  dateOfJoining: string;
+  exitDate?: string;
   location?: string;
   designation?: string;
   department?: string;
@@ -63,8 +66,11 @@ interface EmployeeFormData {
   employeeId: string;
   firstName: string;
   lastName: string;
+  gender: string;
   email: string;
   phoneNumber: string;
+  dateOfJoining: string;
+  exitDate: string;
   location: string;
   designation: string;
   department: string;
@@ -91,8 +97,11 @@ const initialFormData: EmployeeFormData = {
   employeeId: '',
   firstName: '',
   lastName: '',
+  gender: '',
   email: '',
   phoneNumber: '',
+  dateOfJoining: '',
+  exitDate: '',
   location: '',
   designation: '',
   department: '',
@@ -326,8 +335,11 @@ export default function EmployeeDetailsPage() {
       employeeId: employee.employeeId,
       firstName: employee.firstName,
       lastName: employee.lastName,
+      gender: employee.gender || '',
       email: employee.email,
       phoneNumber: employee.phoneNumber || '',
+      dateOfJoining: employee.dateOfJoining ? new Date(employee.dateOfJoining).toISOString().split('T')[0] : '',
+      exitDate: employee.exitDate ? new Date(employee.exitDate).toISOString().split('T')[0] : '',
       location: employee.location || '',
       designation: employee.designation || '',
       department: employee.department || '',
@@ -452,6 +464,12 @@ export default function EmployeeDetailsPage() {
       field: 'lastName',
       headerName: 'Last Name',
       width: 140,
+      headerClassName: 'datagrid-header',
+    },
+    {
+      field: 'gender',
+      headerName: 'Gender',
+      width: 100,
       headerClassName: 'datagrid-header',
     },
     {
@@ -760,6 +778,20 @@ export default function EmployeeDetailsPage() {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Gender</InputLabel>
+                <Select
+                  value={formData.gender}
+                  label="Gender"
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  <MenuItem value="M">Male (M)</MenuItem>
+                  <MenuItem value="F">Female (F)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 required
@@ -775,6 +807,27 @@ export default function EmployeeDetailsPage() {
                 label="Phone Number"
                 value={formData.phoneNumber}
                 onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Date of Joining"
+                type="date"
+                value={formData.dateOfJoining}
+                onChange={(e) => setFormData({ ...formData, dateOfJoining: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Exit Date"
+                type="date"
+                value={formData.exitDate}
+                onChange={(e) => setFormData({ ...formData, exitDate: e.target.value })}
+                InputLabelProps={{ shrink: true }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -913,6 +966,20 @@ export default function EmployeeDetailsPage() {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Gender</InputLabel>
+                <Select
+                  value={formData.gender}
+                  label="Gender"
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  <MenuItem value="M">Male (M)</MenuItem>
+                  <MenuItem value="F">Female (F)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 required
@@ -928,6 +995,27 @@ export default function EmployeeDetailsPage() {
                 label="Phone Number"
                 value={formData.phoneNumber}
                 onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Date of Joining"
+                type="date"
+                value={formData.dateOfJoining}
+                onChange={(e) => setFormData({ ...formData, dateOfJoining: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Exit Date"
+                type="date"
+                value={formData.exitDate}
+                onChange={(e) => setFormData({ ...formData, exitDate: e.target.value })}
+                InputLabelProps={{ shrink: true }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1075,6 +1163,14 @@ export default function EmployeeDetailsPage() {
                   {selectedEmployee.lastName}
                 </Typography>
               </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Gender
+                </Typography>
+                <Typography variant="body1" fontWeight={600}>
+                  {selectedEmployee.gender || 'N/A'}
+                </Typography>
+              </Grid>
               <Grid item xs={12}>
                 <Typography variant="body2" color="text.secondary">
                   Email
@@ -1089,6 +1185,22 @@ export default function EmployeeDetailsPage() {
                 </Typography>
                 <Typography variant="body1" fontWeight={600}>
                   {selectedEmployee.phoneNumber || 'N/A'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Date of Joining
+                </Typography>
+                <Typography variant="body1" fontWeight={600}>
+                  {selectedEmployee.dateOfJoining ? new Date(selectedEmployee.dateOfJoining).toLocaleDateString() : 'N/A'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Exit Date
+                </Typography>
+                <Typography variant="body1" fontWeight={600}>
+                  {selectedEmployee.exitDate ? new Date(selectedEmployee.exitDate).toLocaleDateString() : 'N/A'}
                 </Typography>
               </Grid>
               <Grid item xs={6}>
@@ -1183,7 +1295,7 @@ export default function EmployeeDetailsPage() {
             <Alert severity="info" sx={{ mb: 2 }}>
               Please ensure your Excel file has the following headers in order:
               <br />
-              Employee ID, First Name, Last Name, Email ID, Phone Number, Location,
+              Employee ID, First Name, Last Name, Gender, Email ID, Phone Number, Date of Joining, Exit Date, Location,
               Designation, Department, Employment Type, Reporting Manager, Reporting Manager ID, LMS Access, Active
             </Alert>
 

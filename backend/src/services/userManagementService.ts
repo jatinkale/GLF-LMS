@@ -41,6 +41,7 @@ export class UserManagementService {
           password: defaultPassword,
           firstName: employee.firstName,
           lastName: employee.lastName,
+          gender: employee.gender,
           role: role,
           isActive: true,
           emailVerified: false,
