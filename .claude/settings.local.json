@@ -6,7 +6,14 @@
       "Bash(del:*)",
       "Bash(move check-emp003.js backend )",
       "Bash(powershell -ExecutionPolicy Bypass -File \"test-login.ps1\")",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(timeout /t 3)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node check-z1200-balance.js:*)",
+      "Bash(node check-allocation-history.js:*)",
+      "Bash(node fix-z1200-balance.js:*)"
     ],
     "deny": [],
     "ask": []

@@ -495,14 +495,19 @@ export class EmployeeService {
     // Process each employee
     for (const employeeData of validation.data) {
       try {
-        // Check if employee already exists
-        const existingEmployee = await prisma.employee.findUnique({
+        // Check if employee already exists by employeeId
+        const existingEmployeeById = await prisma.employee.findUnique({
           where: { employeeId: employeeData.employeeId }
         });
 
-        if (existingEmployee) {
+        // Check if employee already exists by email
+        const existingEmployeeByEmail = await prisma.employee.findUnique({
+          where: { email: employeeData.email }
+        });
+
+        if (existingEmployeeById) {
           // Update existing employee using updateEmployee method (this will sync to LMS user)
-          await this.updateEmployee(existingEmployee.employeeId, {
+          await this.updateEmployee(existingEmployeeById.employeeId, {
             firstName: employeeData.firstName,
             lastName: employeeData.lastName,
             gender: employeeData.gender,
@@ -520,6 +525,9 @@ export class EmployeeService {
             isActive: employeeData.isActive
           });
           updatedCount++;
+        } else if (existingEmployeeByEmail && existingEmployeeByEmail.employeeId !== employeeData.employeeId) {
+          // Email exists with different employeeId - skip and report error
+          errors.push(`Employee ${employeeData.employeeId}: Email ${employeeData.email} already exists with employee ID ${existingEmployeeByEmail.employeeId}`);
         } else {
           // Create new employee
           await prisma.employee.create({
@@ -558,6 +566,21 @@ export class EmployeeService {
     };
   }
 
+  // Helper function to map location to region
+  private mapLocationToRegion(location: string | null): 'IND' | 'US' {
+    if (!location) return 'IND';
+
+    const locationUpper = location.toUpperCase();
+    if (locationUpper.includes('IND') || locationUpper.includes('INDIA')) {
+      return 'IND';
+    } else if (locationUpper.includes('US') || locationUpper.includes('USA') || locationUpper.includes('AMERICA')) {
+      return 'US';
+    }
+
+    // Default to IND if location doesn't match any pattern
+    return 'IND';
+  }
+
   // Create or update LMS users from employee records
   async createLMSUsers(employeeIds: string[]) {
     const results = {
@@ -589,6 +612,9 @@ export class EmployeeService {
         // Determine role based on LMS Access
         const role: Role = employee.lmsAccess === 'MGR' ? 'MANAGER' : 'EMPLOYEE';
 
+        // Map location to region
+        const region = this.mapLocationToRegion(employee.location);
+
         // Check if reporting manager has LMS user account
         let managerEmployeeId: string | null = null;
         if (employee.reportingManagerId) {
@@ -602,7 +628,7 @@ export class EmployeeService {
         }
 
         if (existingUser) {
-          // Update existing user (including password reset to default)
+          // Update existing user (including password reset to default and region)
           await prisma.user.update({
             where: { email: employee.email },
             data: {
@@ -616,6 +642,7 @@ export class EmployeeService {
               employeeId: employee.employeeId,
               phoneNumber: employee.phoneNumber,
               managerEmployeeId: managerEmployeeId,
+              region: region,
             }
           });
           results.updated++;
@@ -634,7 +661,7 @@ export class EmployeeService {
               phoneNumber: employee.phoneNumber,
               dateOfJoining: employee.dateOfJoining || new Date(),
               employmentType: employee.employmentType || 'FTE',
-              region: employee.region || 'IND',
+              region: region,
               isActive: employee.isActive,
               emailVerified: false,
               managerEmployeeId: managerEmployeeId,

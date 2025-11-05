@@ -26,7 +26,9 @@ export default function AnimatedCounter({
 
       // Easing function for smooth animation
       const easeOutQuad = (t: number) => t * (2 - t);
-      const currentCount = Math.floor(easeOutQuad(progress) * end);
+      // Support decimal values for leave balances (e.g., 1.5, 2.5 days)
+      // Round to 1 decimal place to handle fractional days
+      const currentCount = Math.round(easeOutQuad(progress) * end * 10) / 10;
 
       setCount(currentCount);
 

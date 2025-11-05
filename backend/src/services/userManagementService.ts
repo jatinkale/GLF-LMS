@@ -250,6 +250,37 @@ export class UserManagementService {
         throw new Error('User not found');
       }
 
+      // Check for dependencies before deletion
+
+      // Check if user has subordinates (is a manager)
+      const subordinates = await prisma.user.findMany({
+        where: { managerEmployeeId: employeeId }
+      });
+
+      if (subordinates.length > 0) {
+        throw new Error(`Cannot delete user: This user is a manager for ${subordinates.length} employee(s). Please reassign their subordinates first.`);
+      }
+
+      // Check if user has been an approver for any leave requests
+      const approvals = await prisma.approval.findMany({
+        where: { approverEmployeeId: employeeId },
+        take: 1
+      });
+
+      if (approvals.length > 0) {
+        throw new Error('Cannot delete user: This user has approval records in the system. Consider deactivating the user instead.');
+      }
+
+      // Check if user has leave requests
+      const leaveRequests = await prisma.leaveRequest.findMany({
+        where: { employeeId: employeeId },
+        take: 1
+      });
+
+      if (leaveRequests.length > 0) {
+        throw new Error('Cannot delete user: This user has leave request records. Consider deactivating the user instead.');
+      }
+
       // Find the corresponding employee record by email
       const employee = await prisma.employee.findUnique({
         where: { email: user.email }

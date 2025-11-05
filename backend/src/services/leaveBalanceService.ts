@@ -89,6 +89,23 @@ export class LeaveBalanceService {
     year: number,
     allocated: number
   ) {
+    // First, check if balance exists to calculate correct available
+    const existingBalance = await prisma.leaveBalance.findUnique({
+      where: {
+        employeeId_leaveTypeCode_year: {
+          employeeId,
+          leaveTypeCode,
+          year,
+        },
+      },
+    });
+
+    // Calculate the correct available balance
+    // available = allocated + carriedForward - used - pending
+    const calculatedAvailable = existingBalance
+      ? allocated + existingBalance.carriedForward - existingBalance.used - existingBalance.pending
+      : allocated;
+
     const balance = await prisma.leaveBalance.upsert({
       where: {
         employeeId_leaveTypeCode_year: {
@@ -99,7 +116,7 @@ export class LeaveBalanceService {
       },
       update: {
         allocated,
-        available: allocated,
+        available: calculatedAvailable,
       },
       create: {
         employeeId,
