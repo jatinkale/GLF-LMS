@@ -29,7 +29,7 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5174',
+  origin: process.env.CORS_ORIGIN || '*',
   credentials: true,
 }));
 
@@ -106,12 +106,14 @@ async function startServer() {
       process.exit(1);
     }
 
-    // Start listening
-    app.listen(PORT, () => {
+    // Start listening on all network interfaces
+    app.listen(PORT, '0.0.0.0', () => {
       logger.info(`Server is running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`Network binding: 0.0.0.0 (accessible from network)`);
       logger.info(`Health check: http://localhost:${PORT}/health`);
       logger.info(`API endpoint: http://localhost:${PORT}/api/v1`);
+      logger.info(`Network access: http://<your-ip>:${PORT}/api/v1`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

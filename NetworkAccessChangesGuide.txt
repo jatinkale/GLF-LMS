@@ -1,0 +1,329 @@
+================================================================================
+    NETWORK ACCESS CONFIGURATION GUIDE FOR LMS v2
+    Enable Backend to Accept Requests from All Network Origins
+================================================================================
+
+IMPORTANT: These changes allow the backend to accept requests from ANY origin
+on your network. This is suitable for development/internal networks.
+
+================================================================================
+STEP 1: GET YOUR MACHINE'S IP ADDRESS
+================================================================================
+
+Run this command in Command Prompt:
+    ipconfig
+
+Look for: "IPv4 Address" under your network adapter
+Example: 172.16.10.50
+
+Note: Your IP might change if using DHCP. You can access via:
+- localhost (always works on your machine)
+- Your current IP (172.16.x.x)
+- Any other machine on the network using your IP
+
+================================================================================
+STEP 2: BACKEND - MODIFY index.ts
+================================================================================
+
+File: backend/src/index.ts
+
+-----------------------------------
+Change #1: Update CORS Configuration
+-----------------------------------
+Location: Lines 31-34
+
+CHANGE FROM:
+------------
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5174',
+  credentials: true,
+}));
+
+TO:
+---
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true,
+}));
+
+-----------------------------------
+Change #2: Bind Server to All Network Interfaces
+-----------------------------------
+Location: Line 110
+
+CHANGE FROM:
+------------
+app.listen(PORT, () => {
+
+TO:
+---
+app.listen(PORT, '0.0.0.0', () => {
+
+-----------------------------------
+Change #3: Add Network Access Logs (Optional but Recommended)
+-----------------------------------
+Location: Lines 113-114
+
+CHANGE FROM:
+------------
+logger.info(`Health check: http://localhost:${PORT}/health`);
+logger.info(`API endpoint: http://localhost:${PORT}/api/v1`);
+
+TO:
+---
+logger.info(`Health check: http://localhost:${PORT}/health`);
+logger.info(`Network access: Server listening on 0.0.0.0:${PORT}`);
+logger.info(`API endpoint: http://localhost:${PORT}/api/v1`);
+logger.info(`Network API: http://<your-ip>:${PORT}/api/v1`);
+
+================================================================================
+STEP 3: BACKEND - MODIFY .env
+================================================================================
+
+File: backend/.env
+
+-----------------------------------
+Change #1: Update CORS_ORIGIN
+-----------------------------------
+Location: Line 14
+
+CHANGE FROM:
+------------
+CORS_ORIGIN=http://localhost:5174
+
+TO:
+---
+CORS_ORIGIN=*
+
+Note: '*' means accept requests from ALL origins
+
+-----------------------------------
+Change #2: Update FRONTEND_URL (Optional)
+-----------------------------------
+Location: Line 4
+
+KEEP AS:
+--------
+FRONTEND_URL=http://localhost:5174
+
+OR CHANGE TO (if you want to set a specific network URL):
+----------------------------------------------------------
+FRONTEND_URL=http://172.16.x.x:5174
+
+Note: This is mainly used for email links, so update to your actual IP
+
+================================================================================
+STEP 4: FRONTEND - MODIFY vite.config.ts
+================================================================================
+
+File: frontend/vite.config.ts
+
+-----------------------------------
+Change: Enable Network Access for Frontend Dev Server
+-----------------------------------
+Location: Lines 7-8
+
+CHANGE FROM:
+------------
+server: {
+  port: 5174,
+
+TO:
+---
+server: {
+  host: '0.0.0.0',
+  port: 5174,
+
+This allows the frontend dev server to be accessed from the network.
+
+================================================================================
+STEP 5: FRONTEND - UPDATE API Configuration
+================================================================================
+
+File: frontend/src/config/api.ts
+
+-----------------------------------
+Option A: Use Environment Variable (RECOMMENDED)
+-----------------------------------
+
+The current code already supports this:
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+
+Create file: frontend/.env.local
+
+ADD:
+----
+VITE_API_URL=http://172.16.x.x:3001/api/v1
+
+Replace 172.16.x.x with your actual IP address.
+
+Benefits:
+- Localhost still works (uses default)
+- Network access works (uses .env.local)
+- .env.local is gitignored (won't commit your IP)
+
+-----------------------------------
+Option B: Make it Dynamic (ADVANCED)
+-----------------------------------
+
+File: frontend/src/config/api.ts
+
+CHANGE FROM:
+------------
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+
+TO:
+---
+const getApiUrl = () => {
+  // If environment variable is set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // Otherwise, dynamically determine based on how frontend is accessed
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3001/api/v1';
+  }
+
+  // Use the current hostname for network access
+  return `http://${hostname}:3001/api/v1`;
+};
+
+const API_URL = getApiUrl();
+
+Benefits:
+- Automatically works with any IP
+- No need to update when IP changes
+- Works for localhost and network access
+
+================================================================================
+STEP 6: RESTART SERVERS
+================================================================================
+
+1. Stop current backend and frontend servers (Ctrl+C in their terminals)
+
+2. Start Backend:
+   cd backend
+   npm run dev
+
+3. Start Frontend:
+   cd frontend
+   npm run dev
+
+================================================================================
+STEP 7: VERIFY NETWORK ACCESS
+================================================================================
+
+From YOUR machine:
+------------------
+- Backend: http://localhost:3001/health
+- Frontend: http://localhost:5174
+
+From ANOTHER machine on the same network:
+------------------------------------------
+- Backend: http://172.16.x.x:3001/health (replace with your IP)
+- Frontend: http://172.16.x.x:5174 (replace with your IP)
+
+Expected Response from Backend:
+--------------------------------
+{
+  "success": true,
+  "message": "Server is running",
+  "timestamp": "2025-11-06T..."
+}
+
+================================================================================
+STEP 8: TROUBLESHOOTING
+================================================================================
+
+Issue: Cannot access from network
+----------------------------------
+1. Check Windows Firewall:
+   - Open Windows Defender Firewall
+   - Click "Allow an app through firewall"
+   - Make sure Node.js is allowed on Private networks
+
+2. Manually add firewall rules:
+   netsh advfirewall firewall add rule name="LMS Backend" dir=in action=allow protocol=TCP localport=3001
+   netsh advfirewall firewall add rule name="LMS Frontend" dir=in action=allow protocol=TCP localport=5174
+
+3. Check if ports are listening:
+   netstat -ano | findstr :3001
+   netstat -ano | findstr :5174
+
+4. Verify your IP hasn't changed:
+   ipconfig
+
+Issue: CORS errors
+-------------------
+1. Check backend .env has: CORS_ORIGIN=*
+2. Check backend console for CORS errors
+3. Clear browser cache and try again
+
+Issue: Frontend can't reach backend
+------------------------------------
+1. Check frontend .env.local has correct VITE_API_URL
+2. Check browser console for network errors
+3. Test backend directly: http://172.16.x.x:3001/health
+
+================================================================================
+SECURITY NOTES
+================================================================================
+
+⚠️  WARNING: Setting CORS_ORIGIN=* allows ANY origin to access your API!
+
+This is acceptable for:
+✅ Development environments
+✅ Internal company networks
+✅ Trusted network environments
+
+DO NOT use in production with sensitive data exposed to the internet!
+
+For production, use specific allowed origins:
+CORS_ORIGIN=https://yourdomain.com,https://app.yourdomain.com
+
+================================================================================
+SUMMARY OF FILES MODIFIED
+================================================================================
+
+Backend:
+1. ✅ backend/src/index.ts (Lines 31-34, 110, 113-114)
+2. ✅ backend/.env (Lines 4, 14)
+
+Frontend:
+3. ✅ frontend/vite.config.ts (Line 7)
+4. ✅ frontend/.env.local (Create new file) OR
+   ✅ frontend/src/config/api.ts (Make dynamic - Lines 3-5)
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+Access URLs (Replace 172.16.x.x with YOUR actual IP):
+------------------------------------------------------
+Local Machine:
+- Frontend: http://localhost:5174
+- Backend:  http://localhost:3001
+
+Network Access:
+- Frontend: http://172.16.x.x:5174
+- Backend:  http://172.16.x.x:3001
+
+Backend Binding:
+- Listens on: 0.0.0.0:3001 (all network interfaces)
+
+CORS Policy:
+- Accepts from: * (all origins)
+
+Firewall Ports:
+- Backend:  3001 (TCP)
+- Frontend: 5174 (TCP)
+
+================================================================================
+END OF GUIDE
+================================================================================
+
+Generated: 2025-11-06
+For: LMS v2 - Leave Management System
+Network: Internal company network (172.16.x.x range)

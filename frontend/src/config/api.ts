@@ -1,6 +1,23 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+// Dynamic API URL configuration - works with both localhost and network access
+const getApiUrl = () => {
+  // If environment variable is set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // Otherwise, dynamically determine based on how frontend is accessed
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3001/api/v1';
+  }
+
+  // Use the current hostname for network access
+  return `http://${hostname}:3001/api/v1`;
+};
+
+const API_URL = getApiUrl();
 
 // Create axios instance
 const api = axios.create({
