@@ -587,3 +587,18 @@ model LeaveProcessHistory {
   @@index([region, employmentType, processMonth, processYear])
   @@map("leave_process_history")
 }
+
+model Holiday {
+  id          String   @id @default(uuid())
+  year        Int
+  date        DateTime
+  description String
+  location    Region
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([year])
+  @@index([location])
+  @@index([year, location])
+  @@map("holidays")
+}

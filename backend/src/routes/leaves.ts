@@ -2,9 +2,12 @@ import express from 'express';
 import { body, query } from 'express-validator';
 import leaveService from '../services/leaveService';
 import approvalService from '../services/approvalService';
+import holidayService from '../services/holidayService';
 import { authenticate, isManagerOrAbove } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
+import { calculateBusinessDaysExcludingHolidays } from '../utils/dateHelper';
+import { Region } from '@prisma/client';
 
 const router = express.Router();
 
@@ -320,6 +323,46 @@ router.delete(
     res.json({
       success: true,
       message: 'Leave request deleted successfully',
+    });
+  })
+);
+
+/**
+ * @route   POST /api/v1/leaves/calculate-days
+ * @desc    Calculate leave days excluding weekends and holidays
+ * @access  Private
+ */
+router.post(
+  '/calculate-days',
+  authenticate,
+  validate([
+    body('startDate').isISO8601().withMessage('Valid start date is required'),
+    body('endDate').isISO8601().withMessage('Valid end date is required'),
+    body('location').isIn(['IND', 'US']).withMessage('Valid location (IND or US) is required'),
+  ]),
+  asyncHandler(async (req, res) => {
+    const { startDate, endDate, location } = req.body;
+
+    // Fetch holidays for the date range and location
+    const holidays = await holidayService.getHolidaysByDateRange(
+      new Date(startDate),
+      new Date(endDate),
+      location as Region
+    );
+
+    // Calculate business days excluding weekends and holidays
+    const totalDays = calculateBusinessDaysExcludingHolidays(
+      new Date(startDate),
+      new Date(endDate),
+      holidays
+    );
+
+    res.json({
+      success: true,
+      data: {
+        totalDays,
+        holidaysExcluded: holidays.length,
+      },
     });
   })
 );

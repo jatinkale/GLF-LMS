@@ -1,0 +1,203 @@
+-- ================================================================================
+-- LMS v2 - CLEAN ENVIRONMENT SCRIPT
+-- ================================================================================
+-- Purpose: Remove all user data while preserving Admin and configuration data
+--
+-- What will be DELETED:
+--   - All employees (except ADMIN001)
+--   - All LMS users (except ADMIN001)
+--   - All leave requests and approvals
+--   - All leave balances
+--   - All audit logs
+--   - All notifications
+--   - All comp-off requests and balances
+--   - All monthly accruals
+--   - All delegations
+--   - Leave process history
+--
+-- What will be PRESERVED:
+--   - Admin user (ADMIN001)
+--   - Admin employee record
+--   - Leave types configuration
+--   - Departments
+--   - Leave templates
+--
+-- IMPORTANT: This script will permanently delete data. Make a backup first!
+-- ================================================================================
+
+-- Start transaction for safety
+START TRANSACTION;
+
+-- Disable foreign key checks temporarily for easier deletion
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ================================================================================
+-- STEP 1: Delete child records first (those with foreign keys)
+-- ================================================================================
+
+-- Delete approvals (references leave_requests and users)
+DELETE FROM approvals
+WHERE leaveRequestId IN (
+    SELECT id FROM leave_requests WHERE employeeId != 'ADMIN001'
+);
+
+-- Delete leave modification requests (references leave_requests)
+DELETE FROM leave_modification_requests
+WHERE leaveRequestId IN (
+    SELECT id FROM leave_requests WHERE employeeId != 'ADMIN001'
+);
+
+-- Delete leave cancellation requests (references leave_requests)
+DELETE FROM leave_cancellation_requests
+WHERE leaveRequestId IN (
+    SELECT id FROM leave_requests WHERE employeeId != 'ADMIN001'
+);
+
+-- Delete audit logs (references leave_requests and users)
+DELETE FROM audit_logs
+WHERE employeeId != 'ADMIN001' OR employeeId IS NULL;
+
+-- Delete leave requests (except admin's)
+DELETE FROM leave_requests
+WHERE employeeId != 'ADMIN001';
+
+-- ================================================================================
+-- STEP 2: Delete comp-off related data
+-- ================================================================================
+
+-- Delete comp off work logs (references comp_off_requests)
+DELETE FROM comp_off_work_logs
+WHERE compOffRequestId IN (
+    SELECT id FROM comp_off_requests WHERE employeeId != 'ADMIN001'
+);
+
+-- Delete comp off requests (except admin's)
+DELETE FROM comp_off_requests
+WHERE employeeId != 'ADMIN001';
+
+-- Delete comp off balances (except admin's)
+DELETE FROM comp_off_balances
+WHERE employeeId != 'ADMIN001';
+
+-- ================================================================================
+-- STEP 3: Delete user-related data
+-- ================================================================================
+
+-- Delete monthly accruals (except admin's)
+DELETE FROM monthly_accruals
+WHERE employeeId != 'ADMIN001';
+
+-- Delete leave balances (except admin's)
+DELETE FROM leave_balances
+WHERE employeeId != 'ADMIN001';
+
+-- Delete notifications (except admin's)
+DELETE FROM notifications
+WHERE employeeId != 'ADMIN001';
+
+-- Delete notification preferences (except admin's)
+DELETE FROM notification_preferences
+WHERE employeeId != 'ADMIN001';
+
+-- Delete delegations (except those involving admin)
+DELETE FROM delegations
+WHERE delegatorEmployeeId != 'ADMIN001'
+  AND delegateEmployeeId != 'ADMIN001';
+
+-- ================================================================================
+-- STEP 4: Delete leave process history (no direct user FK, but good to clean)
+-- ================================================================================
+
+-- Delete all leave process history
+DELETE FROM leave_process_history;
+
+-- ================================================================================
+-- STEP 5: Delete users and employees (except Admin)
+-- ================================================================================
+
+-- Delete all LMS users except Admin
+DELETE FROM users
+WHERE employeeId != 'ADMIN001';
+
+-- Delete all employees except Admin
+DELETE FROM employees
+WHERE employeeId != 'ADMIN001';
+
+-- ================================================================================
+-- STEP 6: Re-enable foreign key checks
+-- ================================================================================
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- ================================================================================
+-- VERIFICATION QUERIES (Optional - Run these to verify the cleanup)
+-- ================================================================================
+
+-- Check remaining users (should only be ADMIN001)
+SELECT 'Remaining Users' AS Info, COUNT(*) AS Count FROM users;
+SELECT * FROM users;
+
+-- Check remaining employees (should only be ADMIN001)
+SELECT 'Remaining Employees' AS Info, COUNT(*) AS Count FROM employees;
+SELECT * FROM employees;
+
+-- Check leave requests (should be 0 or only admin's)
+SELECT 'Remaining Leave Requests' AS Info, COUNT(*) AS Count FROM leave_requests;
+
+-- Check leave balances (should only be admin's)
+SELECT 'Remaining Leave Balances' AS Info, COUNT(*) AS Count FROM leave_balances;
+
+-- Check approvals (should be 0)
+SELECT 'Remaining Approvals' AS Info, COUNT(*) AS Count FROM approvals;
+
+-- Check audit logs (should be 0 or only system logs)
+SELECT 'Remaining Audit Logs' AS Info, COUNT(*) AS Count FROM audit_logs;
+
+-- Verify configuration data is preserved
+SELECT 'Leave Types' AS Info, COUNT(*) AS Count FROM leave_types;
+SELECT 'Departments' AS Info, COUNT(*) AS Count FROM departments;
+
+-- ================================================================================
+-- COMMIT OR ROLLBACK
+-- ================================================================================
+
+-- Review the verification queries above before committing!
+
+-- If everything looks good, COMMIT the transaction:
+COMMIT;
+
+-- If something went wrong, ROLLBACK the transaction:
+-- ROLLBACK;
+
+-- ================================================================================
+-- POST-CLEANUP NOTES
+-- ================================================================================
+--
+-- After running this script:
+--
+-- 1. Admin Login Credentials:
+--    Email: admin@golivefaster.com
+--    Password: Admin@123 (default from seed script)
+--    Employee ID: ADMIN001
+--
+-- 2. Admin will still have their leave balances
+--
+-- 3. All configuration is preserved:
+--    - Leave types (BL, CL, COMP, LWP, ML, PL, PTL, PTO)
+--    - Departments
+--    - Leave templates
+--
+-- 4. You can now:
+--    - Import fresh employee data via Excel
+--    - Create new LMS users
+--    - Allocate leave balances
+--
+-- 5. If you want to also reset admin's leave balances:
+--    UPDATE leave_balances
+--    SET allocated = 0, used = 0, pending = 0, available = 0,
+--        carriedForward = 0, expired = 0, encashed = 0
+--    WHERE employeeId = 'ADMIN001';
+--
+-- ================================================================================
+-- END OF SCRIPT
+-- ================================================================================

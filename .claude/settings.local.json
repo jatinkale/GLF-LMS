@@ -14,7 +14,15 @@
       "Bash(node check-z1200-balance.js:*)",
       "Bash(node check-allocation-history.js:*)",
       "Bash(node fix-z1200-balance.js:*)",
-      "Bash(ipconfig:*)"
+      "Bash(ipconfig:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(timeout /t 2)",
+      "Bash(taskkill:*)",
+      "Bash(node test-holiday-api.js:*)",
+      "Bash(ping:*)",
+      "Bash(nul)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

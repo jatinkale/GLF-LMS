@@ -26,6 +26,7 @@ import {
   Logout,
   People,
   Policy,
+  CalendarMonth,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from './Logo';
@@ -46,6 +47,7 @@ const navItems: NavItem[] = [
   { text: 'Approvals', icon: <CheckCircle />, path: '/approvals', roles: ['MANAGER', 'HR', 'ADMIN'] },
   { text: 'Employee Management', icon: <People />, path: '/employees', roles: ['ADMIN'] },
   { text: 'Leave Policy', icon: <Policy />, path: '/leave-policy', roles: ['ADMIN'] },
+  { text: 'Holiday Calendar', icon: <CalendarMonth />, path: '/holiday-calendar', roles: ['ADMIN'] },
   { text: 'Profile', icon: <Person />, path: '/profile', roles: ['EMPLOYEE', 'MANAGER', 'HR'] },
 ];
 

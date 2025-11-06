@@ -113,6 +113,7 @@ export class AuthService {
         lastName: true,
         gender: true,
         role: true,
+        region: true,
         isActive: true,
         department: {
           select: {

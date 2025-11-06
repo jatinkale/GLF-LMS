@@ -47,6 +47,40 @@ export function isWeekend(date: Date): boolean {
 }
 
 /**
+ * Calculate business days (excluding weekends and holidays)
+ */
+export function calculateBusinessDaysExcludingHolidays(
+  startDate: Date,
+  endDate: Date,
+  holidays: Date[] = []
+): number {
+  let count = 0;
+  const current = new Date(startDate);
+  const end = new Date(endDate);
+
+  // Normalize holiday dates to midnight for comparison
+  const normalizedHolidays = holidays.map(h => {
+    const d = new Date(h);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  });
+
+  while (current <= end) {
+    const dayOfWeek = current.getDay();
+    const currentTime = new Date(current).setHours(0, 0, 0, 0);
+
+    // Count if not weekend and not a holiday
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !normalizedHolidays.includes(currentTime)) {
+      count++;
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return count;
+}
+
+/**
  * Format date to YYYY-MM-DD
  */
 export function formatDate(date: Date): string {

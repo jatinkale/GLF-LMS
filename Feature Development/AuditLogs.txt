@@ -3,7 +3,7 @@ Building a robust Audit Logging
 1. Every create new, update, approve, reject and delete action should be logged.
 2. Actions and data that should be logged is as follows:
 
-a. Adding/creating new employee: Event - Create employee or editemployee, created or edited by Name and ID, time stamp, Auto generated text log message describing what was added or edited
+a. Adding/creating new employee: Event - Create employee or edit employee, created or edited by Name and ID, time stamp, Auto generated text log message describing what was added or edited
 b. Create, edit access, disable, delete LMS user: Event - Create, edit access, disable, delete LMS User, created by ror edited by Name and ID, time stamp, Auto generated text log message describing what was created, edited or deleted.
 c. All user actions on admin Leave Policy screen in a similar way
 d. Employee - Apply leave, cancel leave - Include Employee Name and ID whose leaves are being applied or edited
@@ -14,3 +14,4 @@ e. Manager - Approve or Reject leaves - Include Employee Name and ID whose leave
 2. Create a new audit log table that meets the logging requirements above
 3. In Admin Portal show "LMS Audit Logs" as a separate menu below "Leave Policy"
 4. Show all the logs from all the users here - properly formatted in a table.
+5. Give filtering capabilities on all the columns.

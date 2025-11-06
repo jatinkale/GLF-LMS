@@ -14,6 +14,7 @@ import ApprovalsPage from './pages/ApprovalsPage';
 import ProfilePage from './pages/ProfilePage';
 import EmployeeDetailsPage from './pages/EmployeeDetailsPage';
 import LeavePolicyPage from './pages/LeavePolicyPage';
+import HolidayCalendarPage from './pages/HolidayCalendarPage';
 
 // Layout
 import Layout from './components/Layout';
@@ -106,6 +107,14 @@ function AppRoutes() {
           element={
             <AdminRoute>
               <LeavePolicyPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="holiday-calendar"
+          element={
+            <AdminRoute>
+              <HolidayCalendarPage />
             </AdminRoute>
           }
         />

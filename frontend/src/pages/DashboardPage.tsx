@@ -234,16 +234,58 @@ export default function DashboardPage() {
     return workingDays;
   };
 
-  // Recalculate days whenever dates or day types change
+  // Recalculate days whenever dates or day types change (using API to exclude holidays)
   useEffect(() => {
-    const days = calculateWorkingDays(
-      formData.startDate,
-      formData.endDate,
-      formData.startDayType,
-      formData.endDayType
-    );
-    setCalculatedDays(days);
-  }, [formData.startDate, formData.endDate, formData.startDayType, formData.endDayType]);
+    const calculateDaysWithHolidays = async () => {
+      if (!formData.startDate || !formData.endDate || !user?.region) {
+        return;
+      }
+
+      try {
+        // Call API to calculate days excluding weekends and holidays
+        const response = await api.post('/leaves/calculate-days', {
+          startDate: formData.startDate.format('YYYY-MM-DD'),
+          endDate: formData.endDate.format('YYYY-MM-DD'),
+          location: user.region,
+        });
+
+        let days = response.data.data.totalDays;
+
+        // Adjust for half days
+        const isStartHalf = formData.startDayType !== 'full';
+        const isEndHalf = formData.endDayType !== 'full';
+
+        if (formData.startDate.isSame(formData.endDate, 'day')) {
+          // Single day leave
+          if (isStartHalf || isEndHalf) {
+            days = 0.5;
+          }
+        } else {
+          // Multi-day leave with half days
+          if (isStartHalf) {
+            days -= 0.5;
+          }
+          if (isEndHalf) {
+            days -= 0.5;
+          }
+        }
+
+        setCalculatedDays(days);
+      } catch (error) {
+        console.error('Error calculating days:', error);
+        // Fallback to local calculation if API fails
+        const days = calculateWorkingDays(
+          formData.startDate,
+          formData.endDate,
+          formData.startDayType,
+          formData.endDayType
+        );
+        setCalculatedDays(days);
+      }
+    };
+
+    calculateDaysWithHolidays();
+  }, [formData.startDate, formData.endDate, formData.startDayType, formData.endDayType, user?.region]);
 
   // Create leave mutation
   const createLeaveMutation = useMutation({
@@ -1336,6 +1378,19 @@ export default function DashboardPage() {
                 ))}
               </TextField>
 
+              {/* Show current balance when leave type is selected */}
+              {formData.leaveTypeId && balancesData && (
+                <Alert severity="success" sx={{ py: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Current Balance: {' '}
+                    {(() => {
+                      const balance = balancesData.find((b: any) => b.leaveType?.leaveTypeCode === formData.leaveTypeId);
+                      return balance ? `${balance.available} ${balance.available === 1 ? 'day' : 'days'}` : 'N/A';
+                    })()}
+                  </Typography>
+                </Alert>
+              )}
+
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <DatePicker
                   label="Start Date"
@@ -1390,7 +1445,7 @@ export default function DashboardPage() {
                   Total Working Days: {calculatedDays} {calculatedDays === 1 ? 'day' : 'days'}
                 </Typography>
                 <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                  Weekends (Saturday & Sunday) are excluded from the calculation
+                  Weekends (Saturday & Sunday) and Regional Holidays (IND/US) are excluded from the calculation
                 </Typography>
               </Alert>
 

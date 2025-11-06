@@ -1,0 +1,36 @@
+Holiday Calendar
+
+Admin Login
+
+Create a new menu at the bottom on the left hand side bar "Holiday Calendar"
+
+On this Holiday Calendar screen
+
+Create a grid with columns:
+
+Current Year: Hardcode the value to current Year
+
+Date (DD-MMM-YYYY)
+Holiday Description (Text)
+Location (IND or US)
+
+Give an "Add Holiday" button at the bottom which will dynamically add a row.
+The row will have these 3 editable fields under each column:
+Date - Date Picker
+Holiday Description - Free Text
+Location - Dropdown (IND or US)
+
+There should be an Save and Cancel button at the end of this dynamic row
+
+Clicking Save: Saves the row, the data appears part of the normal data grid and non editable. The Save and Cancel buttons are replaced by Delete button
+Clicking Cancel: The data is not saved. Erased from temp memory. The dynamic row disappears.
+
+The Holiday Grid with saved data is always visible.
+
+Option to filter on every column header.
+
+---------------------
+
+Enhance Apply Leaves logic:
+
+Along with weekends, the Apply Leaves logic should start excluding Holidays, that match the user's location (IND or US), when calculating and displaying number of leaves applied.

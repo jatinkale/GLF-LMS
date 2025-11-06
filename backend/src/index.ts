@@ -17,6 +17,7 @@ import employeeRoutes from './routes/employees';
 import userRoutes from './routes/users';
 import adminRoutes from './routes/admin';
 import approvalsRoutes from './routes/approvals';
+import holidayRoutes from './routes/holidays';
 
 // Load environment variables
 dotenv.config();
@@ -73,6 +74,7 @@ app.use('/api/v1/employees', employeeRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/approvals', approvalsRoutes);
+app.use('/api/v1/holidays', holidayRoutes);
 
 // Root route
 app.get('/', (req, res) => {
