@@ -130,6 +130,7 @@ model User {
   profilePicture       String?
   isActive             Boolean      @default(true)
   emailVerified        Boolean      @default(false)
+  mustChangePassword   Boolean      @default(true)
   lastLogin            DateTime?
   passwordResetToken   String?
   passwordResetExpires DateTime?

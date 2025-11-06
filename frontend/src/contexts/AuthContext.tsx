@@ -10,6 +10,7 @@ interface User {
   employeeId: string;
   gender?: string;
   region?: string;
+  mustChangePassword?: boolean;
   role: 'ADMIN' | 'HR' | 'MANAGER' | 'EMPLOYEE';
   department?: {
     id: string;

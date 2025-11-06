@@ -155,7 +155,8 @@ export class UserManagementService {
       await prisma.user.update({
         where: { employeeId },
         data: {
-          password: defaultPassword
+          password: defaultPassword,
+          mustChangePassword: true
         }
       });
 

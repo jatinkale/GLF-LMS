@@ -115,6 +115,7 @@ export class AuthService {
         role: true,
         region: true,
         isActive: true,
+        mustChangePassword: true,
         department: {
           select: {
             id: true,
@@ -247,10 +248,13 @@ export class AuthService {
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    // Update password
+    // Update password and set mustChangePassword to false
     await prisma.user.update({
       where: { employeeId },
-      data: { password: hashedPassword }
+      data: {
+        password: hashedPassword,
+        mustChangePassword: false
+      }
     });
 
     logger.info('Password changed successfully', { employeeId });

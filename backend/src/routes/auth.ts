@@ -86,13 +86,7 @@ router.put(
   authenticate,
   validate([
     body('currentPassword').notEmpty().withMessage('Current password is required'),
-    body('newPassword').custom((value) => {
-      const result = isStrongPassword(value);
-      if (!result.valid) {
-        throw new Error(result.message);
-      }
-      return true;
-    }),
+    body('newPassword').notEmpty().withMessage('New password is required'),
   ]),
   asyncHandler(async (req, res) => {
     const result = await authService.changePassword(
