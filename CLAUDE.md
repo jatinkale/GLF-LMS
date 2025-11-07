@@ -1401,7 +1401,374 @@ For questions or support, contact the development team.
 
 ---
 
+## Recent Major Changes (Continued)
+
+### Holiday Calendar Management & First-Time Password Reset
+
+**Date:** November 6, 2025
+
+#### Summary
+Implemented comprehensive Holiday Calendar management system with regional support (IND/US) and holiday-aware leave calculations. Added first-time password reset functionality requiring users to change default passwords on initial login.
+
+**Key Changes:**
+
+1. **Holiday Calendar Management:**
+   - Admin interface to manage organization-wide holidays
+   - Regional support: India (IND) and United States (US)
+   - Year-based organization (current year -1 to +1)
+   - ToggleButton filters for quick navigation
+   - Add, edit, and delete holidays
+   - Custom color scheme matching existing UI patterns
+
+2. **Holiday-Aware Leave Calculations:**
+   - Backend API calculates working days excluding weekends AND regional holidays
+   - Region field added to user profile
+   - Leave requests automatically exclude applicable regional holidays
+   - Half-day calculations properly adjusted
+   - Real-time leave balance display in Apply Leaves dialog
+
+3. **First-Time Password Reset:**
+   - New users created with default password must change it on first login
+   - `mustChangePassword` flag added to User model
+   - Dedicated password change page with validation
+   - Route protection redirects to password change when required
+   - Admin password reset triggers mandatory password change on next login
+   - No password complexity restrictions (per business requirement)
+
+4. **UI/UX Improvements:**
+   - Leave balance shown immediately when leave type selected
+   - Updated messaging: "Weekends (Saturday & Sunday) and Regional Holidays (IND/US) are excluded"
+   - Consistent button colors across all admin interfaces
+   - White backgrounds on editable fields for better UX
+
+#### Database Schema Changes
+
+**User Model** (`backend/prisma/schema.prisma`):
+```prisma
+model User {
+  // ... existing fields ...
+  mustChangePassword   Boolean      @default(true)  // ADDED
+  region               String?                      // Now included in login
+  // ... rest of fields ...
+}
+```
+
+**Holiday Model** (NEW):
+```prisma
+model Holiday {
+  id          String   @id @default(uuid())
+  date        DateTime
+  name        String
+  location    String   // IND or US
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([date, location])
+  @@index([year, location])
+}
+```
+
+#### Backend Changes
+
+**New Files:**
+
+1. **`backend/src/services/holidayService.ts`**:
+   - `getAllHolidays(filters)`: Get holidays with year/location filters
+   - `createHoliday(data)`: Create new holiday
+   - `updateHoliday(id, data)`: Update existing holiday
+   - `deleteHoliday(id)`: Delete holiday
+   - `getHolidaysForDateRange(startDate, endDate, location)`: Get holidays in range
+
+2. **`backend/src/routes/holidays.ts`**:
+   - `GET /api/v1/holidays`: List holidays with filters
+   - `POST /api/v1/holidays`: Create holiday (Admin only)
+   - `PUT /api/v1/holidays/:id`: Update holiday (Admin only)
+   - `DELETE /api/v1/holidays/:id`: Delete holiday (Admin only)
+
+**Updated Services:**
+
+1. **`backend/src/services/authService.ts`**:
+   - Added `region: true` to login select statement (line 116)
+   - Added `mustChangePassword: true` to login select
+   - Updated `changePassword()` to set `mustChangePassword: false` (line 257)
+
+2. **`backend/src/services/leaveService.ts`**:
+   - Updated `calculateWorkingDays()` to call `holidayService.getHolidaysForDateRange()`
+   - Excludes regional holidays based on user's region
+   - Handles partial holidays (half-day leaves on holiday dates)
+
+3. **`backend/src/services/userManagementService.ts`**:
+   - Updated `resetPassword()` to set `mustChangePassword: true` (line 159)
+   - Ensures admin password reset triggers password change requirement
+
+**Updated Routes:**
+
+1. **`backend/src/routes/auth.ts`**:
+   - Changed password change route from POST to PUT (line 84)
+   - Removed password strength validation (lines 87-90)
+   - Route: `PUT /api/v1/auth/change-password`
+
+2. **`backend/src/index.ts`**:
+   - Added holiday routes: `app.use('/api/v1/holidays', holidayRoutes);`
+
+#### Frontend Changes
+
+**New Files:**
+
+1. **`frontend/src/pages/HolidayCalendarPage.tsx`** (Complete implementation):
+   - ToggleButton filters for Year (Previous/Current/Next) and Location (All/IND/US)
+   - Add Holiday functionality with white background editable fields
+   - Inline editing for existing holidays
+   - Save/Cancel buttons with custom colors (#11998e for Save, #f857a6 for Cancel)
+   - Add Holiday button with blue color (#2196f3) matching Employee Management
+   - Plain text location display (no colored chips)
+   - Data grid with center-aligned date column
+   - Year selection limited to current and next year when adding
+
+**Updated Files:**
+
+1. **`frontend/src/contexts/AuthContext.tsx`**:
+   - Added `region?: string` to User interface (line 12)
+   - Added `mustChangePassword?: boolean` to User interface (line 13)
+
+2. **`frontend/src/pages/LeavesPage.tsx`**:
+   - Added leave balance query and display (lines 161-168, 592-603)
+   - Fixed half-day calculation logic (lines 116-133)
+   - Updated to call `/leaves/calculate-days` API with region parameter
+   - Updated exclusion message text (line 634)
+   - Added query invalidation for leave-balances after create/cancel (lines 204, 221)
+
+3. **`frontend/src/pages/DashboardPage.tsx`**:
+   - Updated to call holiday API instead of local calculation (lines 237-288)
+   - Fixed half-day calculation with proper value checks (lines 255-256)
+   - Added leave balance display in Apply Leaves dialog
+   - Updated exclusion message text
+
+4. **`frontend/src/pages/ChangePasswordPage.tsx`** (NEW - Complete implementation):
+   - Dedicated password change page for first-time login
+   - Three fields: Current Password, New Password, Confirm New Password
+   - Toggle password visibility for all fields
+   - Form validation (matching passwords, different from current)
+   - Cancel button logs out and returns to login
+   - Submit button calls API and logs out on success
+   - Warning alert explaining password change requirement
+
+5. **`frontend/src/App.tsx`**:
+   - Imported `ChangePasswordPage` component (line 11)
+   - Added `/change-password` route (lines 84-91)
+   - Updated `ProtectedRoute` to redirect if `mustChangePassword` is true (lines 44-47)
+   - Added to admin routes navigation
+
+6. **`frontend/src/components/Layout.tsx`**:
+   - Added "Holiday Calendar" menu item for Admin role
+   - Icon: CalendarMonth
+   - Route: `/holiday-calendar`
+
+#### Bug Fixes Applied
+
+1. **Authorization Middleware Bug:**
+   - **Issue**: Admin couldn't create holidays - "You do not have permission" error
+   - **Root Cause**: `authorize(['ADMIN'])` passing array instead of rest parameters
+   - **Fix**: Changed to `authorize('ADMIN')` in `backend/src/routes/holidays.ts` (lines 48, 74)
+
+2. **Region Field Missing:**
+   - **Issue**: Holiday exclusion not working - API not being called
+   - **Root Cause**: `region` field not included in login response
+   - **Fix**: Added `region: true` to login select in authService.ts (line 116)
+   - **Impact**: User object now has region, enabling holiday-aware calculations
+
+3. **Half-Day Calculation Bug:**
+   - **Issue**: Half-day selections not calculating as 0.5 days
+   - **Root Cause**: Code checked for `'half'` but radio buttons sent `'first-half'` or `'second-half'`
+   - **Fix**: Updated both LeavesPage and DashboardPage to check for non-'full' values
+
+4. **Password Change Route Error:**
+   - **Issue**: "Route /api/v1/auth/change-password not found"
+   - **Root Cause**: Backend route was PUT, frontend called POST
+   - **Fix**: Changed frontend to use `api.put()` (ChangePasswordPage.tsx line 41)
+
+5. **Password Validation Removed:**
+   - **Issue**: Password strength validation preventing simple passwords
+   - **Business Requirement**: No password restrictions
+   - **Fix**: Removed custom validation from auth route (line 89)
+
+#### API Endpoints Added
+
+**Holiday Management:**
+
+| Method | Endpoint | Description | Auth Required | Role |
+|--------|----------|-------------|---------------|------|
+| GET | `/api/v1/holidays` | Get holidays with filters (year, location) | Yes | All |
+| POST | `/api/v1/holidays` | Create new holiday | Yes | ADMIN |
+| PUT | `/api/v1/holidays/:id` | Update holiday | Yes | ADMIN |
+| DELETE | `/api/v1/holidays/:id` | Delete holiday | Yes | ADMIN |
+
+**Leave Calculation:**
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/leaves/calculate-days` | Calculate working days excluding weekends and regional holidays | Yes |
+
+**Password Management:**
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| PUT | `/api/v1/auth/change-password` | Change password (sets mustChangePassword to false) | Yes |
+
+#### User Flow Changes
+
+**First-Time Login Flow:**
+1. User logs in with default password (`Password-123`)
+2. Backend returns user object with `mustChangePassword: true`
+3. Frontend redirects to `/change-password` (route protection)
+4. User must enter current password, new password, and confirm
+5. On submit, password is updated and `mustChangePassword` set to false
+6. User is logged out and redirected to login page
+7. User logs in with new password and accesses application
+
+**Admin Password Reset Flow:**
+1. Admin clicks "Reset Password" on employee in Employee Management
+2. Backend sets password to `Password-123` and `mustChangePassword: true`
+3. Employee's next login triggers first-time login flow
+4. Employee must change password before accessing application
+
+**Leave Request with Holidays Flow:**
+1. User opens Apply Leaves dialog
+2. Selects leave type - current balance shown immediately in green Alert
+3. Selects start date and end date
+4. Frontend calls `/leaves/calculate-days` API with user's region
+5. Backend fetches holidays for date range and region
+6. Calculates working days excluding weekends AND regional holidays
+7. Adjusts for half-day selections if applicable
+8. Returns calculated days to frontend
+9. User sees: "You are applying for X days" with updated message
+10. Message states: "Weekends and Regional Holidays are excluded"
+
+#### Testing Performed
+
+**Holiday Calendar:**
+- ✅ Create holiday for IND region (Nov 20, 2025 - Delayed Diwali)
+- ✅ Create holiday for US region
+- ✅ Edit existing holiday
+- ✅ Delete holiday
+- ✅ Filter by year (Previous/Current/Next)
+- ✅ Filter by location (All/IND/US)
+- ✅ Verify year dropdown shows only current and next year when adding
+
+**Holiday-Aware Leave Calculation:**
+- ✅ Leave request spanning weekend (correctly excluded)
+- ✅ Leave request spanning regional holiday (correctly excluded)
+- ✅ Leave request: Nov 18-21 with Nov 20 IND holiday → Shows 3 days
+- ✅ Half-day on start date reduces by 0.5
+- ✅ Half-day on end date reduces by 0.5
+- ✅ Half-day on single-day leave shows 0.5 days
+- ✅ Leave balance displayed immediately on leave type selection
+
+**Password Reset:**
+- ✅ New user login with default password redirects to change password
+- ✅ Change password with matching new passwords succeeds
+- ✅ Change password with mismatched passwords shows error
+- ✅ Change password with same as current shows error
+- ✅ Cancel button logs out and returns to login
+- ✅ Admin reset password triggers password change on next login
+- ✅ User can set simple password (no restrictions)
+- ✅ After password change, mustChangePassword is false
+
+#### Important Notes
+
+1. **Region Field Requirement:**
+   - Users must have `region` field populated (IND or US)
+   - Region is synced from Employee to User during LMS user creation
+   - Existing users may need region field populated manually
+
+2. **Holiday Date Format:**
+   - Holidays stored as DateTime in database
+   - Frontend displays as localized date string
+   - API accepts ISO 8601 date format
+
+3. **Password Change Enforcement:**
+   - Users can click "Cancel" to logout (doesn't force password change)
+   - This is by design - Cancel simply logs out user
+   - User must change password to access any protected routes
+
+4. **Leave Balance Display:**
+   - Only shows when leave type is selected
+   - Displays in green Alert above date pickers
+   - Shows available days for selected leave type
+   - Updates in real-time after leave creation/cancellation
+
+5. **Half-Day Calculation Priority:**
+   - Half-day reductions applied AFTER holiday exclusions
+   - If holiday falls on half-day selection, no conflict (holiday already excluded)
+   - Single-day half-day leave always shows 0.5 days
+
+#### Known Limitations
+
+1. **Holiday Overlap:** System allows creating duplicate holidays for same date/location (unique constraint prevents duplicates)
+2. **Partial Holiday Support:** Current implementation excludes full holidays only; no support for half-day holidays
+3. **Historical Data:** Changing holidays doesn't retroactively affect approved leave requests
+4. **Region Migration:** Existing users without region field won't get holiday exclusions until region is populated
+
+#### Technical Implementation Details
+
+**Holiday Service Architecture:**
+```typescript
+// Holiday calculation integrated into leave service
+export class LeaveService {
+  async calculateWorkingDays(startDate, endDate, location) {
+    // 1. Get all dates in range
+    // 2. Exclude weekends (Saturday, Sunday)
+    // 3. Fetch holidays from database for location and date range
+    // 4. Exclude holiday dates
+    // 5. Return count of remaining working days
+  }
+}
+```
+
+**Password Change Security:**
+- Current password must be verified before change
+- New password cannot match current password
+- Passwords hashed with bcrypt (12 rounds)
+- No password strength requirements (business decision)
+- User logged out after change (forces re-login with new password)
+
+**UI Color Scheme Consistency:**
+- Add Holiday button: `#2196f3` (matches Add Employee)
+- Save button: `#11998e` (matches Approve)
+- Cancel button: `#f857a6` (matches Reject)
+- All buttons use solid colors (no gradients)
+- ToggleButton active state: `#677eea` (purple gradient color)
+
+---
+
 ## Changelog
+
+### v2.4.0 (November 6, 2025)
+- **NEW:** Holiday Calendar management system with regional support (IND/US)
+- **NEW:** Admin interface to create, edit, and delete holidays
+- **NEW:** ToggleButton filters for Year and Location in Holiday Calendar
+- **NEW:** Holiday-aware leave calculations excluding regional holidays
+- **NEW:** First-time password reset requirement for new users
+- **NEW:** Dedicated Change Password page with validation
+- **NEW:** `mustChangePassword` flag added to User model
+- **NEW:** Region field included in user login response
+- **NEW:** Leave balance display in Apply Leaves dialog
+- **NEW:** `/leaves/calculate-days` API endpoint with holiday exclusion
+- **NEW:** `/holidays` API endpoints for CRUD operations
+- **ENHANCEMENT:** Admin password reset triggers mandatory password change on next login
+- **ENHANCEMENT:** Half-day calculations properly integrated with holiday exclusions
+- **ENHANCEMENT:** Updated messaging: "Weekends and Regional Holidays are excluded"
+- **ENHANCEMENT:** Query invalidation for leave-balances after mutations
+- **ENHANCEMENT:** Holiday Calendar UI with white backgrounds on editable fields
+- **ENHANCEMENT:** Custom color scheme matching existing approval buttons
+- **FIX:** Authorization middleware bug - changed from array to rest parameters
+- **FIX:** Region field missing from login response
+- **FIX:** Half-day calculation checking wrong values ('half' vs 'first-half'/'second-half')
+- **FIX:** Password change route error (POST vs PUT method mismatch)
+- **FIX:** Removed password strength validation per business requirement
+- **SECURITY:** Password change enforced via route protection
+- **SECURITY:** Current password verification required before change
 
 ### v2.3.0 (November 5, 2025)
 - **NEW:** Date of Joining field added to Employee Management (mandatory)
@@ -1464,5 +1831,5 @@ For questions or support, contact the development team.
 
 ---
 
-**Last Updated:** November 5, 2025
-**Version:** 2.3.0
+**Last Updated:** November 6, 2025
+**Version:** 2.4.0

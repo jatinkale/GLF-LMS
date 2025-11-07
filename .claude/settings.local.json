@@ -22,7 +22,8 @@
       "Bash(node test-holiday-api.js:*)",
       "Bash(ping:*)",
       "Bash(nul)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

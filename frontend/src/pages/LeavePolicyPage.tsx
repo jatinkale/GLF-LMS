@@ -22,8 +22,11 @@ import {
   CircularProgress,
   Chip,
   Autocomplete,
+  Tabs,
+  Tab,
+  Checkbox,
 } from '@mui/material';
-import { History as HistoryIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
+import { History as HistoryIcon, PlayArrow as PlayArrowIcon, Search as SearchIcon } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import { gradients } from '../theme/theme';
@@ -51,6 +54,9 @@ interface EmployeeSearchResult {
   email: string;
   gender?: string;
   region?: string;
+  employmentType?: string;
+  designation?: string;
+  dateOfJoining?: string;
   manager?: {
     employeeId: string;
     firstName: string;
@@ -60,8 +66,24 @@ interface EmployeeSearchResult {
 
 interface SpecialLeaveFormData {
   leaveType: string;
+  action: string;
   numberOfLeaves: string;
   comments: string;
+}
+
+interface BulkFilters {
+  employeeIds: string;
+  location: string;
+  employmentType: string;
+  gender: string;
+  dateOfJoiningFrom: string;
+  dateOfJoiningTo: string;
+}
+
+interface LeaveType {
+  leaveTypeCode: string;
+  name: string;
+  category: string;
 }
 
 const EMPLOYMENT_TYPES = [
@@ -96,6 +118,9 @@ export default function LeavePolicyPage() {
     region: 'IND' | 'US';
     data: EmploymentTypeData | USEmploymentTypeData | null;
   }>({ open: false, region: 'IND', data: null });
+
+  // Special Actions tab state
+  const [specialActionsTab, setSpecialActionsTab] = useState(0); // 0 = Single User, 1 = Bulk
 
   // State for India region data
   const [indiaData, setIndiaData] = useState<EmploymentTypeData[]>([
@@ -147,11 +172,12 @@ export default function LeavePolicyPage() {
     },
   ]);
 
-  // State for Special Leaves section
+  // State for Single User Update
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeSearchResult | null>(null);
   const [specialLeaveForm, setSpecialLeaveForm] = useState<SpecialLeaveFormData>({
     leaveType: '',
+    action: 'ADD',
     numberOfLeaves: '',
     comments: '',
   });
@@ -159,6 +185,43 @@ export default function LeavePolicyPage() {
     open: boolean;
     data: any;
   }>({ open: false, data: null });
+
+  // State for Bulk Update
+  const [bulkFilters, setBulkFilters] = useState<BulkFilters>({
+    employeeIds: '',
+    location: 'All',
+    employmentType: 'All',
+    gender: 'All',
+    dateOfJoiningFrom: '',
+    dateOfJoiningTo: '',
+  });
+  const [bulkEmployees, setBulkEmployees] = useState<EmployeeSearchResult[]>([]);
+  const [selectedBulkEmployees, setSelectedBulkEmployees] = useState<string[]>([]);
+  const [bulkLeaveForm, setBulkLeaveForm] = useState<SpecialLeaveFormData>({
+    leaveType: '',
+    action: 'ADD',
+    numberOfLeaves: '',
+    comments: '',
+  });
+  const [bulkConfirmDialog, setBulkConfirmDialog] = useState<{
+    open: boolean;
+    data: any;
+  }>({ open: false, data: null });
+  const [bulkResultDialog, setBulkResultDialog] = useState<{
+    open: boolean;
+    data: any;
+  }>({ open: false, data: null });
+
+  // Fetch all leave types
+  const { data: leaveTypesData } = useQuery({
+    queryKey: ['admin-leave-types-all'],
+    queryFn: async () => {
+      const response = await api.get('/admin/leave-types-all');
+      return response.data.data;
+    },
+  });
+
+  const leaveTypes: LeaveType[] = leaveTypesData || [];
 
   // Fetch process history
   const { data: historyData, isLoading: isLoadingHistory } = useQuery({
@@ -242,7 +305,7 @@ export default function LeavePolicyPage() {
     enabled: employeeSearch.length >= 2,
   });
 
-  // Process special leave mutation
+  // Process special leave mutation (single user)
   const processSpecialLeaveMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await api.post('/admin/leave-policy/process-special', data);
@@ -251,9 +314,9 @@ export default function LeavePolicyPage() {
     onSuccess: () => {
       toast.success('Special leave processed successfully!');
       queryClient.invalidateQueries({ queryKey: ['leave-policy-history'] });
-      // Clear form but keep employee selected
       setSpecialLeaveForm({
         leaveType: '',
+        action: 'ADD',
         numberOfLeaves: '',
         comments: '',
       });
@@ -265,6 +328,58 @@ export default function LeavePolicyPage() {
     },
   });
 
+  // Bulk search mutation
+  const bulkSearchMutation = useMutation({
+    mutationFn: async (filters: BulkFilters) => {
+      const response = await api.post('/admin/search-employees-bulk', {
+        employeeIds: filters.employeeIds ? filters.employeeIds.split(',').map(id => id.trim()).filter(id => id) : [],
+        location: filters.location !== 'All' ? filters.location : undefined,
+        employmentType: filters.employmentType !== 'All' ? filters.employmentType : undefined,
+        gender: filters.gender !== 'All' ? filters.gender : undefined,
+        dateOfJoiningFrom: filters.dateOfJoiningFrom || undefined,
+        dateOfJoiningTo: filters.dateOfJoiningTo || undefined,
+      });
+      return response.data.data;
+    },
+    onSuccess: (data) => {
+      setBulkEmployees(data);
+      setSelectedBulkEmployees([]);
+      if (data.length === 0) {
+        toast.info('No employees found matching the filters');
+      } else {
+        toast.success(`Found ${data.length} employee(s)`);
+      }
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to search employees');
+    },
+  });
+
+  // Bulk process mutation
+  const bulkProcessMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/admin/leave-policy/process-special-bulk', data);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setBulkConfirmDialog({ open: false, data: null });
+      setBulkResultDialog({ open: true, data });
+      queryClient.invalidateQueries({ queryKey: ['leave-policy-history'] });
+      // Clear selections
+      setSelectedBulkEmployees([]);
+      setBulkLeaveForm({
+        leaveType: '',
+        action: 'ADD',
+        numberOfLeaves: '',
+        comments: '',
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to process bulk leave');
+      setBulkConfirmDialog({ open: false, data: null });
+    },
+  });
+
   const handleUpdateData = (index: number, field: keyof EmploymentTypeData, value: any) => {
     const newData = [...indiaData];
     newData[index] = { ...newData[index], [field]: value };
@@ -272,7 +387,6 @@ export default function LeavePolicyPage() {
   };
 
   const handleProcessLeaves = async (data: EmploymentTypeData) => {
-    // Validation
     const cl = parseFloat(data.casualLeave) || 0;
     const pl = parseFloat(data.privilegeLeave) || 0;
 
@@ -286,7 +400,6 @@ export default function LeavePolicyPage() {
       return;
     }
 
-    // Check if already processed
     try {
       const response = await api.post('/admin/leave-policy/check-exists', {
         region: 'IND',
@@ -295,13 +408,7 @@ export default function LeavePolicyPage() {
         year: data.year,
       });
 
-      if (response.data.data.exists) {
-        // Show confirmation dialog
-        setConfirmDialog({ open: true, region: 'IND', data });
-      } else {
-        // Process directly
-        setConfirmDialog({ open: true, region: 'IND', data });
-      }
+      setConfirmDialog({ open: true, region: 'IND', data });
     } catch (error) {
       toast.error('Error checking processing history');
     }
@@ -314,7 +421,6 @@ export default function LeavePolicyPage() {
   };
 
   const handleProcessUSLeaves = async (data: USEmploymentTypeData) => {
-    // Validation
     const pto = parseFloat(data.plannedTimeOff) || 0;
     const bl = parseFloat(data.bereavementLeave) || 0;
 
@@ -328,7 +434,6 @@ export default function LeavePolicyPage() {
       return;
     }
 
-    // Check if already processed
     try {
       const response = await api.post('/admin/leave-policy/check-exists', {
         region: 'US',
@@ -337,13 +442,7 @@ export default function LeavePolicyPage() {
         year: data.year,
       });
 
-      if (response.data.data.exists) {
-        // Show confirmation dialog
-        setConfirmDialog({ open: true, region: 'US', data });
-      } else {
-        // Process directly
-        setConfirmDialog({ open: true, region: 'US', data });
-      }
+      setConfirmDialog({ open: true, region: 'US', data });
     } catch (error) {
       toast.error('Error checking processing history');
     }
@@ -362,7 +461,7 @@ export default function LeavePolicyPage() {
     return `${monthLabel} ${year}`;
   };
 
-  // Handler for special leave processing
+  // Single User Update handlers
   const handleProcessSpecialLeave = () => {
     if (!selectedEmployee) {
       toast.error('Please select an employee');
@@ -371,6 +470,11 @@ export default function LeavePolicyPage() {
 
     if (!specialLeaveForm.leaveType) {
       toast.error('Please select a leave type');
+      return;
+    }
+
+    if (!specialLeaveForm.action) {
+      toast.error('Please select an action (Add/Remove)');
       return;
     }
 
@@ -385,15 +489,30 @@ export default function LeavePolicyPage() {
       return;
     }
 
-    // Show confirmation dialog
+    // Check for gender/location mismatch
+    const selectedLeaveType = leaveTypes.find(lt => lt.leaveTypeCode === specialLeaveForm.leaveType);
+    const warnings: string[] = [];
+
+    if (selectedLeaveType) {
+      if (selectedLeaveType.leaveTypeCode === 'ML' && selectedEmployee.gender !== 'F') {
+        warnings.push('Maternity Leave (ML) is typically for Female employees only.');
+      }
+      if (selectedLeaveType.leaveTypeCode === 'PTL' && selectedEmployee.gender !== 'M') {
+        warnings.push('Paternity Leave (PTL) is typically for Male employees only.');
+      }
+    }
+
     setSpecialConfirmDialog({
       open: true,
       data: {
         employeeId: selectedEmployee.employeeId,
         employeeName: `${selectedEmployee.firstName} ${selectedEmployee.lastName}`,
         leaveType: specialLeaveForm.leaveType,
+        leaveTypeName: selectedLeaveType?.name || specialLeaveForm.leaveType,
+        action: specialLeaveForm.action,
         numberOfLeaves,
         comments: specialLeaveForm.comments.trim(),
+        warnings,
       },
     });
   };
@@ -404,24 +523,107 @@ export default function LeavePolicyPage() {
     processSpecialLeaveMutation.mutate({
       employeeId: specialConfirmDialog.data.employeeId,
       leaveTypeCode: specialConfirmDialog.data.leaveType,
+      action: specialConfirmDialog.data.action,
       numberOfLeaves: specialConfirmDialog.data.numberOfLeaves,
       comments: specialConfirmDialog.data.comments,
     });
   };
 
-  // Get filtered leave types based on gender
-  const getFilteredLeaveTypes = () => {
-    const baseTypes = [{ code: 'COMP', name: 'Compensatory Off' }];
+  // Bulk Update handlers
+  const handleBulkSearch = () => {
+    bulkSearchMutation.mutate(bulkFilters);
+  };
 
-    if (selectedEmployee?.gender === 'F') {
-      baseTypes.push({ code: 'ML', name: 'Maternity Leave' });
+  const handleSelectAllBulk = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      setSelectedBulkEmployees(bulkEmployees.map(emp => emp.employeeId));
+    } else {
+      setSelectedBulkEmployees([]);
+    }
+  };
+
+  const handleSelectBulkEmployee = (employeeId: string) => {
+    setSelectedBulkEmployees(prev => {
+      if (prev.includes(employeeId)) {
+        return prev.filter(id => id !== employeeId);
+      } else {
+        return [...prev, employeeId];
+      }
+    });
+  };
+
+  const handleProcessBulkLeave = () => {
+    if (selectedBulkEmployees.length === 0) {
+      toast.error('Please select at least one employee');
+      return;
     }
 
-    if (selectedEmployee?.gender === 'M') {
-      baseTypes.push({ code: 'PTL', name: 'Paternity Leave' });
+    if (!bulkLeaveForm.leaveType) {
+      toast.error('Please select a leave type');
+      return;
     }
 
-    return baseTypes;
+    if (!bulkLeaveForm.action) {
+      toast.error('Please select an action (Add/Remove)');
+      return;
+    }
+
+    const numberOfLeaves = parseFloat(bulkLeaveForm.numberOfLeaves);
+    if (!numberOfLeaves || numberOfLeaves <= 0) {
+      toast.error('Please enter a valid number of leaves greater than 0');
+      return;
+    }
+
+    if (!bulkLeaveForm.comments || !bulkLeaveForm.comments.trim()) {
+      toast.error('Please enter comments');
+      return;
+    }
+
+    // Check for gender/location mismatches
+    const selectedLeaveType = leaveTypes.find(lt => lt.leaveTypeCode === bulkLeaveForm.leaveType);
+    const selectedEmployeesData = bulkEmployees.filter(emp => selectedBulkEmployees.includes(emp.employeeId));
+    const warnings: string[] = [];
+
+    if (selectedLeaveType) {
+      if (selectedLeaveType.leaveTypeCode === 'ML') {
+        const maleEmployees = selectedEmployeesData.filter(emp => emp.gender !== 'F');
+        if (maleEmployees.length > 0) {
+          warnings.push(`Maternity Leave (ML) selected for ${maleEmployees.length} non-female employee(s): ${maleEmployees.map(e => `${e.firstName} ${e.lastName}`).join(', ')}`);
+        }
+      }
+      if (selectedLeaveType.leaveTypeCode === 'PTL') {
+        const femaleEmployees = selectedEmployeesData.filter(emp => emp.gender !== 'M');
+        if (femaleEmployees.length > 0) {
+          warnings.push(`Paternity Leave (PTL) selected for ${femaleEmployees.length} non-male employee(s): ${femaleEmployees.map(e => `${e.firstName} ${e.lastName}`).join(', ')}`);
+        }
+      }
+    }
+
+    setBulkConfirmDialog({
+      open: true,
+      data: {
+        employeeIds: selectedBulkEmployees,
+        employeeCount: selectedBulkEmployees.length,
+        leaveType: bulkLeaveForm.leaveType,
+        leaveTypeName: selectedLeaveType?.name || bulkLeaveForm.leaveType,
+        action: bulkLeaveForm.action,
+        numberOfLeaves,
+        comments: bulkLeaveForm.comments.trim(),
+        warnings,
+      },
+    });
+  };
+
+  const handleConfirmBulkLeave = () => {
+    if (!bulkConfirmDialog.data) return;
+
+    bulkProcessMutation.mutate({
+      employeeIds: bulkConfirmDialog.data.employeeIds,
+      leaveTypeCode: bulkConfirmDialog.data.leaveType,
+      action: bulkConfirmDialog.data.action,
+      numberOfLeaves: bulkConfirmDialog.data.numberOfLeaves,
+      comments: bulkConfirmDialog.data.comments,
+    });
   };
 
   return (
@@ -565,7 +767,7 @@ export default function LeavePolicyPage() {
       </Paper>
 
       {/* US Section */}
-      <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+      <Paper sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
         <Typography variant="h5" sx={{ mb: 3, fontWeight: 600, color: '#1976d2' }}>
           US
         </Typography>
@@ -665,162 +867,427 @@ export default function LeavePolicyPage() {
         </Grid>
       </Paper>
 
-      {/* Special Leaves Section */}
+      {/* Special Actions Section */}
       <Paper sx={{ p: 3, mt: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
         <Typography variant="h5" sx={{ mb: 3, fontWeight: 600, color: '#1976d2' }}>
-          Special Leaves
+          Special Actions
         </Typography>
 
-        {/* Employee Search */}
-        <Box sx={{ mb: 3 }}>
-          <Autocomplete
-            options={employeeSearchResults || []}
-            getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.employeeId})`}
-            inputValue={employeeSearch}
-            onInputChange={(event, newValue) => setEmployeeSearch(newValue)}
-            onChange={(event, newValue) => {
-              setSelectedEmployee(newValue);
-              setSpecialLeaveForm({ leaveType: '', numberOfLeaves: '', comments: '' });
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Search Employee by Name or ID"
-                placeholder="Type at least 2 characters..."
-                fullWidth
-              />
-            )}
-            renderOption={(props, option) => (
-              <li {...props} key={option.employeeId}>
-                <Box>
-                  <Typography variant="body1">
-                    {option.firstName} {option.lastName}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {option.employeeId} • {option.email}
-                  </Typography>
-                </Box>
-              </li>
-            )}
-            noOptionsText={employeeSearch.length < 2 ? 'Type at least 2 characters' : 'No employees found'}
-          />
-        </Box>
+        {/* Tabs for Single User vs Bulk */}
+        <Tabs
+          value={specialActionsTab}
+          onChange={(e, newValue) => setSpecialActionsTab(newValue)}
+          sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="Single User Update" />
+          <Tab label="Bulk Update" />
+        </Tabs>
 
-        {/* Selected Employee Details */}
-        {selectedEmployee && (
-          <Paper variant="outlined" sx={{ p: 3, mb: 3, bgcolor: '#f5f5f5' }}>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              Selected Employee Details
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={4}>
-                <Typography variant="body2" color="text.secondary">Employee ID</Typography>
-                <Typography variant="body1" fontWeight={600}>{selectedEmployee.employeeId}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Typography variant="body2" color="text.secondary">Employee Name</Typography>
-                <Typography variant="body1" fontWeight={600}>
-                  {selectedEmployee.firstName} {selectedEmployee.lastName}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Typography variant="body2" color="text.secondary">Gender</Typography>
-                <Typography variant="body1" fontWeight={600}>
-                  {selectedEmployee.gender === 'M' ? 'Male' : selectedEmployee.gender === 'F' ? 'Female' : 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Typography variant="body2" color="text.secondary">Location</Typography>
-                <Typography variant="body1" fontWeight={600}>{selectedEmployee.region || 'N/A'}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Typography variant="body2" color="text.secondary">Reporting Manager Name</Typography>
-                <Typography variant="body1" fontWeight={600}>
-                  {selectedEmployee.manager
-                    ? `${selectedEmployee.manager.firstName} ${selectedEmployee.manager.lastName}`
-                    : 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Typography variant="body2" color="text.secondary">Reporting Manager ID</Typography>
-                <Typography variant="body1" fontWeight={600}>
-                  {selectedEmployee.manager?.employeeId || 'N/A'}
-                </Typography>
-              </Grid>
-            </Grid>
-          </Paper>
-        )}
-
-        {/* Leave Processing Form */}
-        {selectedEmployee && (
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={2}>
-              <TextField
-                fullWidth
-                select
-                label="Leave Type"
-                value={specialLeaveForm.leaveType}
-                onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, leaveType: e.target.value })}
-                required
-              >
-                {getFilteredLeaveTypes().map((type) => (
-                  <MenuItem key={type.code} value={type.code}>
-                    {type.name} ({type.code})
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={2}>
-              <TextField
-                fullWidth
-                label="Number of Leaves"
-                type="number"
-                inputProps={{ step: 0.5, min: 0 }}
-                value={specialLeaveForm.numberOfLeaves}
-                onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, numberOfLeaves: e.target.value })}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Comments"
-                value={specialLeaveForm.comments}
-                onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, comments: e.target.value })}
-                required
-                placeholder="Enter reason for special leave allocation"
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={<PlayArrowIcon />}
-                onClick={handleProcessSpecialLeave}
-                disabled={processSpecialLeaveMutation.isPending}
-                sx={{
-                  height: 56,
-                  bgcolor: '#2e7d32 !important',
-                  '&:hover': {
-                    bgcolor: '#1b5e20 !important',
-                  },
+        {/* Single User Update Tab */}
+        {specialActionsTab === 0 && (
+          <Box>
+            {/* Employee Search */}
+            <Box sx={{ mb: 3 }}>
+              <Autocomplete
+                options={employeeSearchResults || []}
+                getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.employeeId})`}
+                inputValue={employeeSearch}
+                onInputChange={(event, newValue) => setEmployeeSearch(newValue)}
+                onChange={(event, newValue) => {
+                  setSelectedEmployee(newValue);
+                  setSpecialLeaveForm({ leaveType: '', action: 'ADD', numberOfLeaves: '', comments: '' });
                 }}
-              >
-                Process Leaves
-              </Button>
-            </Grid>
-          </Grid>
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Search Employee by Name or ID"
+                    placeholder="Type at least 2 characters..."
+                    fullWidth
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option.employeeId}>
+                    <Box>
+                      <Typography variant="body1">
+                        {option.firstName} {option.lastName}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {option.employeeId} • {option.email}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+                noOptionsText={employeeSearch.length < 2 ? 'Type at least 2 characters' : 'No employees found'}
+              />
+            </Box>
+
+            {/* Selected Employee Details */}
+            {selectedEmployee && (
+              <Paper variant="outlined" sx={{ p: 3, mb: 3, bgcolor: '#f5f5f5' }}>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  Selected Employee Details
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Typography variant="body2" color="text.secondary">Employee ID</Typography>
+                    <Typography variant="body1" fontWeight={600}>{selectedEmployee.employeeId}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Typography variant="body2" color="text.secondary">Employee Name</Typography>
+                    <Typography variant="body1" fontWeight={600}>
+                      {selectedEmployee.firstName} {selectedEmployee.lastName}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Typography variant="body2" color="text.secondary">Gender</Typography>
+                    <Typography variant="body1" fontWeight={600}>
+                      {selectedEmployee.gender === 'M' ? 'Male' : selectedEmployee.gender === 'F' ? 'Female' : 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Typography variant="body2" color="text.secondary">Location</Typography>
+                    <Typography variant="body1" fontWeight={600}>{selectedEmployee.region || 'N/A'}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Typography variant="body2" color="text.secondary">Reporting Manager Name</Typography>
+                    <Typography variant="body1" fontWeight={600}>
+                      {selectedEmployee.manager
+                        ? `${selectedEmployee.manager.firstName} ${selectedEmployee.manager.lastName}`
+                        : 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Typography variant="body2" color="text.secondary">Reporting Manager ID</Typography>
+                    <Typography variant="body1" fontWeight={600}>
+                      {selectedEmployee.manager?.employeeId || 'N/A'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+
+            {/* Leave Processing Form */}
+            {selectedEmployee && (
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={2.4}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Leave Type"
+                    value={specialLeaveForm.leaveType}
+                    onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, leaveType: e.target.value })}
+                    required
+                  >
+                    {leaveTypes.map((type) => (
+                      <MenuItem key={type.leaveTypeCode} value={type.leaveTypeCode}>
+                        {type.name} ({type.leaveTypeCode})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={2.4}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Action"
+                    value={specialLeaveForm.action}
+                    onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, action: e.target.value })}
+                    required
+                  >
+                    <MenuItem value="ADD">Add Leaves</MenuItem>
+                    <MenuItem value="REMOVE">Remove Leaves</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={1.2}>
+                  <TextField
+                    fullWidth
+                    label="Number of Leaves"
+                    type="number"
+                    inputProps={{ step: 0.5, min: 0 }}
+                    value={specialLeaveForm.numberOfLeaves}
+                    onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, numberOfLeaves: e.target.value })}
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Comments"
+                    value={specialLeaveForm.comments}
+                    onChange={(e) => setSpecialLeaveForm({ ...specialLeaveForm, comments: e.target.value })}
+                    required
+                    placeholder="Enter reason"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    startIcon={<PlayArrowIcon />}
+                    onClick={handleProcessSpecialLeave}
+                    disabled={processSpecialLeaveMutation.isPending}
+                    sx={{
+                      height: 56,
+                      bgcolor: '#2e7d32 !important',
+                      '&:hover': {
+                        bgcolor: '#1b5e20 !important',
+                      },
+                    }}
+                  >
+                    Process Leaves
+                  </Button>
+                </Grid>
+              </Grid>
+            )}
+
+            {!selectedEmployee && (
+              <Alert severity="info">
+                Please search and select an employee to process special leaves
+              </Alert>
+            )}
+          </Box>
         )}
 
-        {!selectedEmployee && (
-          <Alert severity="info">
-            Please search and select an employee to process special leaves
-          </Alert>
+        {/* Bulk Update Tab */}
+        {specialActionsTab === 1 && (
+          <Box>
+            {/* Bulk Filters */}
+            <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Filter Employees
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Employee IDs (comma-separated)"
+                    value={bulkFilters.employeeIds}
+                    onChange={(e) => setBulkFilters({ ...bulkFilters, employeeIds: e.target.value })}
+                    placeholder="e.g., EMP001, EMP002"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Location"
+                    value={bulkFilters.location}
+                    onChange={(e) => setBulkFilters({ ...bulkFilters, location: e.target.value })}
+                  >
+                    <MenuItem value="All">All</MenuItem>
+                    <MenuItem value="IND">India</MenuItem>
+                    <MenuItem value="US">United States</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Employment Type"
+                    value={bulkFilters.employmentType}
+                    onChange={(e) => setBulkFilters({ ...bulkFilters, employmentType: e.target.value })}
+                  >
+                    <MenuItem value="All">All</MenuItem>
+                    {EMPLOYMENT_TYPES.map((et) => (
+                      <MenuItem key={et.value} value={et.value}>
+                        {et.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Gender"
+                    value={bulkFilters.gender}
+                    onChange={(e) => setBulkFilters({ ...bulkFilters, gender: e.target.value })}
+                  >
+                    <MenuItem value="All">All</MenuItem>
+                    <MenuItem value="M">Male</MenuItem>
+                    <MenuItem value="F">Female</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    startIcon={<SearchIcon />}
+                    onClick={handleBulkSearch}
+                    disabled={bulkSearchMutation.isPending}
+                    sx={{
+                      height: 56,
+                      bgcolor: '#1976d2 !important',
+                      '&:hover': {
+                        bgcolor: '#115293 !important',
+                      },
+                    }}
+                  >
+                    Search
+                  </Button>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Date of Joining From"
+                    type="date"
+                    InputLabelProps={{ shrink: true }}
+                    value={bulkFilters.dateOfJoiningFrom}
+                    onChange={(e) => setBulkFilters({ ...bulkFilters, dateOfJoiningFrom: e.target.value })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Date of Joining To"
+                    type="date"
+                    InputLabelProps={{ shrink: true }}
+                    value={bulkFilters.dateOfJoiningTo}
+                    onChange={(e) => setBulkFilters({ ...bulkFilters, dateOfJoiningTo: e.target.value })}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Bulk Employees Grid */}
+            {bulkEmployees.length > 0 && (
+              <Box>
+                <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={selectedBulkEmployees.length === bulkEmployees.length}
+                            indeterminate={selectedBulkEmployees.length > 0 && selectedBulkEmployees.length < bulkEmployees.length}
+                            onChange={handleSelectAllBulk}
+                          />
+                        </TableCell>
+                        <TableCell><strong>Employee ID</strong></TableCell>
+                        <TableCell><strong>Name</strong></TableCell>
+                        <TableCell><strong>Gender</strong></TableCell>
+                        <TableCell><strong>Location</strong></TableCell>
+                        <TableCell><strong>Employment Type</strong></TableCell>
+                        <TableCell><strong>Designation</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {bulkEmployees.map((emp) => (
+                        <TableRow key={emp.employeeId} hover>
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              checked={selectedBulkEmployees.includes(emp.employeeId)}
+                              onChange={() => handleSelectBulkEmployee(emp.employeeId)}
+                            />
+                          </TableCell>
+                          <TableCell>{emp.employeeId}</TableCell>
+                          <TableCell>{emp.firstName} {emp.lastName}</TableCell>
+                          <TableCell>{emp.gender === 'M' ? 'Male' : emp.gender === 'F' ? 'Female' : 'N/A'}</TableCell>
+                          <TableCell>{emp.region || 'N/A'}</TableCell>
+                          <TableCell>{emp.employmentType || 'N/A'}</TableCell>
+                          <TableCell>{emp.designation || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {/* Bulk Processing Form */}
+                <Paper variant="outlined" sx={{ p: 3, bgcolor: '#f5f5f5' }}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                    Process Leaves for Selected Employees ({selectedBulkEmployees.length} selected)
+                  </Typography>
+                  <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} sm={2.4}>
+                      <TextField
+                        fullWidth
+                        select
+                        label="Leave Type"
+                        value={bulkLeaveForm.leaveType}
+                        onChange={(e) => setBulkLeaveForm({ ...bulkLeaveForm, leaveType: e.target.value })}
+                        required
+                      >
+                        {leaveTypes.map((type) => (
+                          <MenuItem key={type.leaveTypeCode} value={type.leaveTypeCode}>
+                            {type.name} ({type.leaveTypeCode})
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={2.4}>
+                      <TextField
+                        fullWidth
+                        select
+                        label="Action"
+                        value={bulkLeaveForm.action}
+                        onChange={(e) => setBulkLeaveForm({ ...bulkLeaveForm, action: e.target.value })}
+                        required
+                      >
+                        <MenuItem value="ADD">Add Leaves</MenuItem>
+                        <MenuItem value="REMOVE">Remove Leaves</MenuItem>
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={1.2}>
+                      <TextField
+                        fullWidth
+                        label="Number of Leaves"
+                        type="number"
+                        inputProps={{ step: 0.5, min: 0 }}
+                        value={bulkLeaveForm.numberOfLeaves}
+                        onChange={(e) => setBulkLeaveForm({ ...bulkLeaveForm, numberOfLeaves: e.target.value })}
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        fullWidth
+                        label="Comments"
+                        value={bulkLeaveForm.comments}
+                        onChange={(e) => setBulkLeaveForm({ ...bulkLeaveForm, comments: e.target.value })}
+                        required
+                        placeholder="Enter reason"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={3}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        startIcon={<PlayArrowIcon />}
+                        onClick={handleProcessBulkLeave}
+                        disabled={bulkProcessMutation.isPending || selectedBulkEmployees.length === 0}
+                        sx={{
+                          height: 56,
+                          bgcolor: '#2e7d32 !important',
+                          '&:hover': {
+                            bgcolor: '#1b5e20 !important',
+                          },
+                        }}
+                      >
+                        Process Leaves
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Box>
+            )}
+
+            {bulkEmployees.length === 0 && !bulkSearchMutation.isPending && (
+              <Alert severity="info">
+                Use the filters above and click "Search" to find employees for bulk leave processing
+              </Alert>
+            )}
+
+            {bulkSearchMutation.isPending && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            )}
+          </Box>
         )}
       </Paper>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({ open: false, data: null })}>
+      {/* Confirmation Dialog for India/US Processing */}
+      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({ open: false, region: 'IND', data: null })}>
         <DialogTitle>Confirm Leave Processing</DialogTitle>
         <DialogContent>
           {confirmDialog.data && (
@@ -866,13 +1333,13 @@ export default function LeavePolicyPage() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDialog({ open: false, data: null })}>Cancel</Button>
+          <Button onClick={() => setConfirmDialog({ open: false, region: 'IND', data: null })}>Cancel</Button>
           <Button
             onClick={handleConfirmProcess}
             variant="contained"
-            disabled={processLeavesMutation.isPending}
+            disabled={processLeavesMutation.isPending || processUSLeavesMutation.isPending}
           >
-            {processLeavesMutation.isPending ? 'Processing...' : 'Confirm & Process'}
+            {(processLeavesMutation.isPending || processUSLeavesMutation.isPending) ? 'Processing...' : 'Confirm & Process'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -945,7 +1412,7 @@ export default function LeavePolicyPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Special Leave Confirmation Dialog */}
+      {/* Special Leave Confirmation Dialog (Single User) */}
       <Dialog
         open={specialConfirmDialog.open}
         onClose={() => setSpecialConfirmDialog({ open: false, data: null })}
@@ -954,6 +1421,14 @@ export default function LeavePolicyPage() {
         <DialogContent>
           {specialConfirmDialog.data && (
             <Box>
+              {specialConfirmDialog.data.warnings && specialConfirmDialog.data.warnings.length > 0 && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={600}>Warning:</Typography>
+                  {specialConfirmDialog.data.warnings.map((warning: string, idx: number) => (
+                    <Typography key={idx} variant="body2">{warning}</Typography>
+                  ))}
+                </Alert>
+              )}
               <Typography variant="body1" sx={{ mb: 2 }}>
                 Are you sure you want to process special leave with the following details?
               </Typography>
@@ -962,7 +1437,10 @@ export default function LeavePolicyPage() {
                   <strong>Employee:</strong> {specialConfirmDialog.data.employeeName} ({specialConfirmDialog.data.employeeId})
                 </Typography>
                 <Typography variant="body2">
-                  <strong>Leave Type:</strong> {specialConfirmDialog.data.leaveType}
+                  <strong>Leave Type:</strong> {specialConfirmDialog.data.leaveTypeName}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Action:</strong> {specialConfirmDialog.data.action === 'ADD' ? 'Add Leaves' : 'Remove Leaves'}
                 </Typography>
                 <Typography variant="body2">
                   <strong>Number of Leaves:</strong> {specialConfirmDialog.data.numberOfLeaves} days
@@ -972,7 +1450,7 @@ export default function LeavePolicyPage() {
                 </Typography>
               </Box>
               <Alert severity="info" sx={{ mt: 2 }}>
-                This will add {specialConfirmDialog.data.numberOfLeaves} days to the employee's leave balance.
+                This will {specialConfirmDialog.data.action === 'ADD' ? 'add' : 'remove'} {specialConfirmDialog.data.numberOfLeaves} days {specialConfirmDialog.data.action === 'ADD' ? 'to' : 'from'} the employee's leave balance.
               </Alert>
             </Box>
           )}
@@ -987,6 +1465,128 @@ export default function LeavePolicyPage() {
             disabled={processSpecialLeaveMutation.isPending}
           >
             {processSpecialLeaveMutation.isPending ? 'Processing...' : 'Confirm & Process'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Leave Confirmation Dialog */}
+      <Dialog
+        open={bulkConfirmDialog.open}
+        onClose={() => setBulkConfirmDialog({ open: false, data: null })}
+      >
+        <DialogTitle>Confirm Bulk Leave Processing</DialogTitle>
+        <DialogContent>
+          {bulkConfirmDialog.data && (
+            <Box>
+              {bulkConfirmDialog.data.warnings && bulkConfirmDialog.data.warnings.length > 0 && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={600}>Warning:</Typography>
+                  {bulkConfirmDialog.data.warnings.map((warning: string, idx: number) => (
+                    <Typography key={idx} variant="body2" sx={{ wordBreak: 'break-word' }}>{warning}</Typography>
+                  ))}
+                </Alert>
+              )}
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Are you sure you want to process leave for multiple employees?
+              </Typography>
+              <Box sx={{ bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+                <Typography variant="body2">
+                  <strong>Number of Employees:</strong> {bulkConfirmDialog.data.employeeCount}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Leave Type:</strong> {bulkConfirmDialog.data.leaveTypeName}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Action:</strong> {bulkConfirmDialog.data.action === 'ADD' ? 'Add Leaves' : 'Remove Leaves'}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Number of Leaves:</strong> {bulkConfirmDialog.data.numberOfLeaves} days
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  <strong>Comments:</strong> {bulkConfirmDialog.data.comments}
+                </Typography>
+              </Box>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                This will {bulkConfirmDialog.data.action === 'ADD' ? 'add' : 'remove'} {bulkConfirmDialog.data.numberOfLeaves} days {bulkConfirmDialog.data.action === 'ADD' ? 'to' : 'from'} each selected employee's leave balance.
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkConfirmDialog({ open: false, data: null })}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmBulkLeave}
+            variant="contained"
+            disabled={bulkProcessMutation.isPending}
+          >
+            {bulkProcessMutation.isPending ? 'Processing...' : 'Confirm & Process'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Processing Result Dialog */}
+      <Dialog
+        open={bulkResultDialog.open}
+        onClose={() => setBulkResultDialog({ open: false, data: null })}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Bulk Processing Results</DialogTitle>
+        <DialogContent>
+          {bulkResultDialog.data && (
+            <Box>
+              <Alert severity="success" sx={{ mb: 2 }}>
+                <Typography variant="body1">
+                  Successfully processed {bulkResultDialog.data.data?.processed || 0} employee(s)
+                </Typography>
+              </Alert>
+
+              {bulkResultDialog.data.data?.details?.processedEmployees?.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                    Processed Successfully:
+                  </Typography>
+                  <Box sx={{ bgcolor: '#e8f5e9', p: 2, borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                    {bulkResultDialog.data.data.details.processedEmployees.map((emp: string, idx: number) => (
+                      <Typography key={idx} variant="body2">• {emp}</Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {bulkResultDialog.data.data?.details?.errorMessages?.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={600} color="error" sx={{ mb: 1 }}>
+                    Errors ({bulkResultDialog.data.data.errors} employee(s)):
+                  </Typography>
+                  <Box sx={{ bgcolor: '#ffebee', p: 2, borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                    {bulkResultDialog.data.data.details.errorMessages.map((error: string, idx: number) => (
+                      <Typography key={idx} variant="body2" color="error">• {error}</Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {bulkResultDialog.data.data?.details?.warningMessages?.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" fontWeight={600} color="warning.main" sx={{ mb: 1 }}>
+                    Warnings:
+                  </Typography>
+                  <Box sx={{ bgcolor: '#fff3e0', p: 2, borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                    {bulkResultDialog.data.data.details.warningMessages.map((warning: string, idx: number) => (
+                      <Typography key={idx} variant="body2" color="warning.main">• {warning}</Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkResultDialog({ open: false, data: null })} variant="contained">
+            Close
           </Button>
         </DialogActions>
       </Dialog>

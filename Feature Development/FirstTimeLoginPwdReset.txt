@@ -1,0 +1,7 @@
+When a LMS user is created with default password and logs in for the first time:
+
+1. Show a screen to reset the password
+2. Screen should show: Current Password, New Password, Confirm New Password fields with Cancel and Submit buttons
+3. Currently no restrictions on what new password is being set by the user
+4. Store the new password and the user should then be able to log in using his new password
+5. If an admin resets the password through Employee Management screen, then the following user login should again be treated like a first log in and should prompt him for password reset.

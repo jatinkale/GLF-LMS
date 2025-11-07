@@ -1,0 +1,26 @@
+Admin - Leave Policy - Special Actions
+
+Replace "Special Leaves" with "Special Actions" section in the Leave Policy menu.
+
+Create 2 subsections:
+
+Subsection 1: "Single User Update"
+
+1. Move the current "Special Leaves" functionality under this subsection.
+2. Add all the leave types in the dropdown.
+3. Add another dropdown between leave type and number of leaves with values "Add Leaves", "Remove Leaves"
+4. If "Add leaves" is selected then the leaves should get added to the selected leaves category for the employee
+5. If "Remove Leaves" is selected then the leaves should get subtracted from the selected leaves category.
+6. Comments is mandatory. Show user confirmation before proceeding.
+6. Give graceful errors if the balance is already 0 and admin tries to subtract
+7. Give a visible warning on user confirmation if admin tries to add a leave for a leave type that is not applicable for the selected users gender and location.
+
+Subsection 2: "Bulk Update"
+
+1. Create a new subsection called "Bulk Update"
+2. Give filters at the top to filter out multiple employess: Employee ID - multiple list of employee IDs, Location, Employment Type, Gender, Date of Joining. Give a search button.
+3. Populate a grid below the filters with a select box to the left.
+4. Give same fields with same functionality (Leave Types, Add/Remove Leaves dropdown, Number of Leaves, Comments, Process button)
+5. The leaves should be processed for employees selected using the select box.
+6. Give graceful errors if the balance is already 0 and admin tries to subtract. Show the names of the employees for whom the error is generated.
+7. Give a visible warning on user confirmation if admin tries to add a leave for a leave type that is not applicable for the selected users gender and location. Show the names of the employees for whom the warning is generated.
