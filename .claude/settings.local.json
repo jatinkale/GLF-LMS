@@ -23,7 +23,10 @@
       "Bash(ping:*)",
       "Bash(nul)",
       "Bash(node:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(JSX_FINDINGS.txt)",
+      "Bash(cat:*)",
+      "Bash(timeout /t 5)"
     ],
     "deny": [],
     "ask": []

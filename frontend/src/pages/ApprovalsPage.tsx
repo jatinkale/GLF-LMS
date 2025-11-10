@@ -26,8 +26,9 @@ import {
   Checkbox,
   Alert,
 } from '@mui/material';
-import { CheckCircle, Cancel, Search } from '@mui/icons-material';
+import { CheckCircle, Cancel, Search, Download } from '@mui/icons-material';
 import { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -123,6 +124,84 @@ export default function ApprovalsPage() {
       return selectedIds.has(leave.id);
     });
   }, [pendingLeaves, selectedIds]);
+
+  // Export to Excel function
+  const handleExportToExcel = () => {
+    try {
+      if (!filteredApprovals || filteredApprovals.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = filteredApprovals.map((leave: any) => {
+        // Get approver - check approvals array first, then fall back to manager
+        let approver = '-';
+
+        // Check if there's an approval record with an approver
+        if (leave.approvals && leave.approvals.length > 0) {
+          const latestApproval = leave.approvals[0];
+          if (latestApproval.approver) {
+            approver = `${latestApproval.approver.firstName} ${latestApproval.approver.lastName}`;
+          }
+        }
+
+        // Fall back to reporting manager if no approver found
+        if (approver === '-' && leave.user?.manager) {
+          approver = `${leave.user.manager.firstName} ${leave.user.manager.lastName}`;
+        }
+
+        return {
+          'Employee ID': leave.user?.employeeId || '-',
+          'Employee Name': `${leave.user?.firstName || ''} ${leave.user?.lastName || ''}`.trim() || '-',
+          'Region': leave.user?.region || '-',
+          'Leave Type': leave.leaveType?.name || '-',
+          'Start Date': leave.startDate ? new Date(leave.startDate).toLocaleDateString() : '-',
+          'End Date': leave.endDate ? new Date(leave.endDate).toLocaleDateString() : '-',
+          'Days': leave.totalDays || 0,
+          'Status': leave.status || '-',
+          'Applied On': leave.appliedDate ? new Date(leave.appliedDate).toLocaleDateString() : '-',
+          'Approver': approver,
+          'Reason': leave.reason || '-',
+        };
+      });
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 15 }, // Employee ID
+        { wch: 25 }, // Employee Name
+        { wch: 10 }, // Region
+        { wch: 20 }, // Leave Type
+        { wch: 15 }, // Start Date
+        { wch: 15 }, // End Date
+        { wch: 8 },  // Days
+        { wch: 12 }, // Status
+        { wch: 15 }, // Applied On
+        { wch: 25 }, // Approver
+        { wch: 40 }, // Reason
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leave Requests');
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `Leave_Requests_${timestamp}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast.success(`Exported ${filteredApprovals.length} leave request(s) to Excel`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data to Excel');
+    }
+  };
 
   // Approve mutation
   const approveMutation = useMutation({
@@ -431,12 +510,46 @@ export default function ApprovalsPage() {
       </Paper>
 
       {/* Bulk Actions */}
-      <Box sx={{ mt: 2, mb: 2, display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
-        {selectedIds.size > 0 && (
-          <Typography variant="body2" color="text.secondary">
-            {selectedIds.size} leave request(s) selected
-          </Typography>
-        )}
+      <Box sx={{ mt: 2, mb: 2, display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'space-between' }}>
+        <Button
+          variant="contained"
+          startIcon={<Download />}
+          onClick={handleExportToExcel}
+          disabled={!filteredApprovals || filteredApprovals.length === 0}
+          sx={{
+            bgcolor: '#388e3c !important',
+            background: '#388e3c !important',
+            backgroundImage: 'none !important',
+            color: '#ffffff !important',
+            fontWeight: 700,
+            textTransform: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            border: '2px solid #388e3c',
+            px: 3,
+            py: 1,
+            '&:hover': {
+              bgcolor: '#2e7d32 !important',
+              background: '#2e7d32 !important',
+              backgroundImage: 'none !important',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            },
+            '&:disabled': {
+              bgcolor: 'rgba(0, 0, 0, 0.12) !important',
+              background: 'rgba(0, 0, 0, 0.12) !important',
+              backgroundImage: 'none !important',
+              color: 'rgba(0, 0, 0, 0.26) !important',
+              border: '2px solid rgba(0, 0, 0, 0.12)',
+            },
+          }}
+        >
+          Export Excel
+        </Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {selectedIds.size > 0 && (
+            <Typography variant="body2" color="text.secondary">
+              {selectedIds.size} leave request(s) selected
+            </Typography>
+          )}
         <ButtonGroup size="small">
           <Button
             variant="contained"
@@ -483,6 +596,7 @@ export default function ApprovalsPage() {
             Reject {selectedIds.size > 0 && `(${selectedIds.size})`}
           </Button>
         </ButtonGroup>
+        </Box>
       </Box>
 
       <Card sx={{ mt: 3 }}>
@@ -559,9 +673,20 @@ export default function ApprovalsPage() {
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
-                          {leave.user?.manager
-                            ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
-                            : 'N/A'}
+                          {(() => {
+                            // Check if there's an approval record with an approver
+                            if (leave.approvals && leave.approvals.length > 0) {
+                              const latestApproval = leave.approvals[0];
+                              if (latestApproval.approver) {
+                                return `${latestApproval.approver.firstName} ${latestApproval.approver.lastName}`;
+                              }
+                            }
+                            // Fall back to reporting manager
+                            if (leave.user?.manager) {
+                              return `${leave.user.manager.firstName} ${leave.user.manager.lastName}`;
+                            }
+                            return 'N/A';
+                          })()}
                         </TableCell>
                         <TableCell>
                           {leave.reason.substring(0, 30)}

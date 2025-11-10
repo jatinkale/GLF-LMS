@@ -1,0 +1,176 @@
+JSX STRUCTURAL ANALYSIS - ApprovalsPage.tsx
+============================================
+
+OPENING AND CLOSING TAG COUNT:
+
+BOX TAGS:
+---------
+Opening <Box>: 7 instances
+  Line 414: <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+  Line 421: <Box>
+  Line 434: <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+  Line 437: <Box>
+  Line 455: <Box>
+  Line 472: <Box sx={{ flexGrow: 1, minWidth: 250 }}>
+  Line 495: <Box sx={{ mt: 2, mb: 2, display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'space-between' }}>
+  Line 529: <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+  Line 635: <Box sx={{ width: 42 }} /> (self-closing)
+
+Closing </Box>: 7 instances
+  Line 416: </Box>
+  Line 451: </Box>
+  Line 469: </Box>
+  Line 490: </Box>
+  Line 491: </Box>
+  Line 581: </Box>
+  Line 582: </Box>
+  Line 851: </Box>
+
+STATUS: MISMATCH DETECTED
+- Opening: 8 (including self-closing)
+- Closing: 8
+- BUT: Line 635 is self-closing <Box sx={{ width: 42 }} />
+- This accounts for 1 opening without corresponding closing tag
+- Line 851 has a closing </Box> with no matching opening
+
+ISSUE IDENTIFIED:
+The final </Box> at line 851 closes the outer <Box> from line 421.
+The structure appears correct overall.
+
+DIALOG TAGS:
+-----------
+Opening <Dialog>: 3 instances
+  Line 767: <Dialog open={rejectionDialog} onClose={() => setRejectionDialog(false)} maxWidth="sm" fullWidth>
+  Line 795: <Dialog open={bulkRejectDialog} onClose={() => setBulkRejectDialog(false)} maxWidth="sm" fullWidth>
+  Line 825: <Dialog open={cancelDialog} onClose={() => setCancelDialog(false)} maxWidth="sm" fullWidth>
+
+Closing </Dialog>: 3 instances
+  Line 792: </Dialog>
+  Line 822: </Dialog>
+  Line 850: </Dialog>
+
+STATUS: CORRECT (3:3 match)
+
+CARD TAGS:
+----------
+Opening <Card>: 1 instance
+  Line 584: <Card sx={{ mt: 3 }}>
+
+Closing </Card>: 1 instance
+  Line 764: </Card>
+
+STATUS: CORRECT (1:1 match)
+
+TABLE TAGS:
+-----------
+Opening <Table>: 1 instance
+  Line 587: <Table>
+
+Closing </Table>: 1 instance
+  Line 761: </Table>
+
+STATUS: CORRECT (1:1 match)
+
+TABLEHEAD TAGS:
+---------------
+Opening <TableHead>: 1 instance
+  Line 588: <TableHead>
+
+Closing </TableHead>: 1 instance
+  Line 612: </TableHead>
+
+STATUS: CORRECT (1:1 match)
+
+TABLEBODY TAGS:
+---------------
+Opening <TableBody>: 1 instance
+  Line 613: <TableBody>
+
+Closing </TableBody>: 1 instance
+  Line 760: </TableBody>
+
+STATUS: CORRECT (1:1 match)
+
+TABLEROW TAGS:
+--------------
+Opening <TableRow>: 2 instances
+  Line 589: <TableRow> (header row)
+  Line 615: <TableRow> (empty state row)
+  Line 626: <TableRow key={leave.id} selected={isSelected}> (data rows - multiple)
+
+Closing </TableRow>: 2 instances
+  Line 611: </TableRow>
+  Line 619: </TableRow>
+  Line 756: </TableRow>
+
+STATUS: Structure is complex due to .map() but appears correct
+
+DIALOGTITLE/CONTENT/ACTIONS:
+----------------------------
+Dialog 1 (Rejection):
+  Line 768: <DialogTitle>Reject Leave Request</DialogTitle> - self-closing in JSX
+  Line 769: <DialogContent>
+  Line 780: </DialogContent> (missing - NO CLOSING TAG!)
+  Line 781: <DialogActions>
+  Line 792: </Dialog> (missing - NO CLOSING TAGS!)
+
+Dialog 2 (Bulk Rejection):
+  Line 796: <DialogTitle>Bulk Reject Leave Requests</DialogTitle> - self-closing in JSX
+  Line 797: <DialogContent>
+  Line 810: </DialogContent> (missing - NO CLOSING TAG!)
+  Line 811: <DialogActions>
+  Line 822: </Dialog> (missing - NO CLOSING TAGS!)
+
+Dialog 3 (Cancel):
+  Line 826: <DialogTitle>Cancel Approved Leave</DialogTitle> - self-closing in JSX
+  Line 827: <DialogContent>
+  Line 838: </DialogContent> (missing - NO CLOSING TAG!)
+  Line 839: <DialogActions>
+  Line 850: </Dialog> (missing - NO CLOSING TAGS!)
+
+CRITICAL ISSUE FOUND:
+=====================
+DialogContent is NOT properly closed in any of the three dialogs.
+DialogActions is NOT properly closed in any of the three dialogs.
+
+Looking at the actual code:
+- Line 769: <DialogContent>
+- Line 770-779: TextField element
+- Line 780: Should have </DialogContent> but goes directly to line 781: <DialogActions>
+  
+Checking line 780 in detail... it should show </DialogContent>
+
+Wait, let me re-examine the actual file content...
+
+Looking at lines 769-791:
+769:        <DialogContent>
+770:          <TextField
+771:            label="Rejection Reason"
+772:            value={rejectionReason}
+773:            onChange={(e) => setRejectionReason(e.target.value)}
+774:            multiline
+775:            rows={4}
+776:            fullWidth
+777:            required
+778:            sx={{ mt: 2 }}
+779:          />
+780:        </DialogContent>
+781:        <DialogActions>
+782:          <Button onClick={() => setRejectionDialog(false)}>Cancel</Button>
+783:          <Button
+784:            onClick={handleRejectSubmit}
+785:            variant="contained"
+786:            color="error"
+787:            disabled={rejectMutation.isPending}
+788:          >
+789:            {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
+790:          </Button>
+791:        </DialogActions>
+792:      </Dialog>
+
+WAIT - Looking at the original file output more carefully...
+The </DialogContent> IS on line 780, and </DialogActions> IS on line 791.
+
+Let me recount the actual closing tags...
+
+FINAL VERIFICATION NEEDED - Let me check the actual line count again.

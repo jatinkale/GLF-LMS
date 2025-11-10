@@ -421,6 +421,56 @@ router.post('/leave-policy/process-special', async (req: Request, res: Response)
       });
     }
 
+    // Fetch leave type to check region and category restrictions
+    const leaveType = await prisma.leaveType.findUnique({
+      where: { leaveTypeCode },
+      select: {
+        leaveTypeCode: true,
+        name: true,
+        region: true,
+        category: true,
+      },
+    });
+
+    if (!leaveType) {
+      return res.status(404).json({
+        success: false,
+        message: `Leave type ${leaveTypeCode} not found`,
+      });
+    }
+
+    // Gender-based leave type validation
+    if (leaveTypeCode === 'ML' && user.gender !== 'F') {
+      return res.status(400).json({
+        success: false,
+        message: `Maternity Leave (ML) can only be assigned to Female employees. Employee ${user.firstName} ${user.lastName} (${employeeId}) is ${user.gender === 'M' ? 'Male' : 'not Female'}.`,
+      });
+    }
+
+    if (leaveTypeCode === 'PTL' && user.gender !== 'M') {
+      return res.status(400).json({
+        success: false,
+        message: `Paternity Leave (PTL) can only be assigned to Male employees. Employee ${user.firstName} ${user.lastName} (${employeeId}) is ${user.gender === 'F' ? 'Female' : 'not Male'}.`,
+      });
+    }
+
+    // Region-based leave type validation
+    if (leaveType.region !== 'ALL') {
+      if (leaveType.region === 'IND' && user.region !== 'IND') {
+        return res.status(400).json({
+          success: false,
+          message: `${leaveType.name} (${leaveTypeCode}) can only be assigned to India-based employees. Employee ${user.firstName} ${user.lastName} (${employeeId}) is in ${user.region}.`,
+        });
+      }
+
+      if (leaveType.region === 'US' && user.region !== 'US') {
+        return res.status(400).json({
+          success: false,
+          message: `${leaveType.name} (${leaveTypeCode}) can only be assigned to US-based employees. Employee ${user.firstName} ${user.lastName} (${employeeId}) is in ${user.region}.`,
+        });
+      }
+    }
+
     const currentYear = new Date().getFullYear();
 
     // Check if leave balance exists
@@ -666,6 +716,24 @@ router.post('/leave-policy/process-special-bulk', async (req: Request, res: Resp
       });
     }
 
+    // Fetch leave type to check region and category restrictions
+    const leaveType = await prisma.leaveType.findUnique({
+      where: { leaveTypeCode },
+      select: {
+        leaveTypeCode: true,
+        name: true,
+        region: true,
+        category: true,
+      },
+    });
+
+    if (!leaveType) {
+      return res.status(404).json({
+        success: false,
+        message: `Leave type ${leaveTypeCode} not found`,
+      });
+    }
+
     const currentYear = new Date().getFullYear();
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -674,6 +742,30 @@ router.post('/leave-policy/process-special-bulk', async (req: Request, res: Resp
     // Process each employee
     for (const user of users) {
       try {
+        // Gender-based leave type validation
+        if (leaveTypeCode === 'ML' && user.gender !== 'F') {
+          errors.push(`${user.firstName} ${user.lastName} (${user.employeeId}): Maternity Leave (ML) can only be assigned to Female employees`);
+          continue;
+        }
+
+        if (leaveTypeCode === 'PTL' && user.gender !== 'M') {
+          errors.push(`${user.firstName} ${user.lastName} (${user.employeeId}): Paternity Leave (PTL) can only be assigned to Male employees`);
+          continue;
+        }
+
+        // Region-based leave type validation
+        if (leaveType.region !== 'ALL') {
+          if (leaveType.region === 'IND' && user.region !== 'IND') {
+            errors.push(`${user.firstName} ${user.lastName} (${user.employeeId}): ${leaveType.name} (${leaveTypeCode}) can only be assigned to India-based employees`);
+            continue;
+          }
+
+          if (leaveType.region === 'US' && user.region !== 'US') {
+            errors.push(`${user.firstName} ${user.lastName} (${user.employeeId}): ${leaveType.name} (${leaveTypeCode}) can only be assigned to US-based employees`);
+            continue;
+          }
+        }
+
         // Check if leave balance exists
         const existingBalance = await prisma.leaveBalance.findFirst({
           where: {
@@ -838,9 +930,6 @@ router.get('/all-leaves', async (req: Request, res: Response) => {
           },
         },
         approvals: {
-          where: {
-            isActive: true,
-          },
           include: {
             approver: {
               select: {
@@ -849,6 +938,9 @@ router.get('/all-leaves', async (req: Request, res: Response) => {
                 employeeId: true,
               },
             },
+          },
+          orderBy: {
+            createdAt: 'desc',
           },
         },
       },

@@ -27,7 +27,7 @@ import {
   Radio,
   Alert,
 } from '@mui/material';
-import { Add, Cancel, FilterList } from '@mui/icons-material';
+import { Add, Cancel, FilterList, Download } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -35,6 +35,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
+import * as XLSX from 'xlsx';
 
 export default function LeavesPage() {
   const { user } = useAuth();
@@ -345,6 +346,75 @@ export default function LeavesPage() {
     setToDate(null);
   };
 
+  // Export to Excel
+  const handleExportToExcel = () => {
+    try {
+      if (!filteredLeaves || filteredLeaves.length === 0) {
+        toast.error('No leave requests to export');
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = filteredLeaves.map((leave: any) => {
+        // Get approver - check approvals array first, then fall back to manager
+        let approver = '-';
+
+        // Check if there's an approval record with an approver
+        if (leave.approvals && leave.approvals.length > 0) {
+          // Get the most recent approval (they're ordered by createdAt desc)
+          const latestApproval = leave.approvals[0];
+          if (latestApproval.approver) {
+            approver = `${latestApproval.approver.firstName} ${latestApproval.approver.lastName}`;
+          }
+        }
+
+        // Fall back to reporting manager if no approver found
+        if (approver === '-' && leave.user?.manager) {
+          approver = `${leave.user.manager.firstName} ${leave.user.manager.lastName}`;
+        }
+
+        return {
+          'Leave Type': leave.leaveType?.name || '-',
+          'Start Date': leave.startDate ? new Date(leave.startDate).toLocaleDateString() : '-',
+          'End Date': leave.endDate ? new Date(leave.endDate).toLocaleDateString() : '-',
+          'Days': leave.totalDays || 0,
+          'Applied On': leave.appliedDate ? new Date(leave.appliedDate).toLocaleDateString() : '-',
+          'Approver': approver,
+          'Reason': leave.reason || '-',
+          'Status': leave.status || '-',
+        };
+      });
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 20 }, // Leave Type
+        { wch: 15 }, // Start Date
+        { wch: 15 }, // End Date
+        { wch: 8 },  // Days
+        { wch: 15 }, // Applied On
+        { wch: 25 }, // Approver
+        { wch: 40 }, // Reason
+        { wch: 12 }, // Status
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // Create workbook and download
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'My Leaves');
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `My_Leaves_${timestamp}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+
+      toast.success(`Exported ${filteredLeaves.length} leave request(s) to Excel`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data to Excel');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED':
@@ -372,13 +442,48 @@ export default function LeavesPage() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">My Leaves</Typography>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={handleOpenDialog}
-        >
-          Apply Leaves
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={<Download />}
+            onClick={handleExportToExcel}
+            disabled={filteredLeaves.length === 0}
+            sx={{
+              bgcolor: '#388e3c !important',
+              background: '#388e3c !important',
+              backgroundImage: 'none !important',
+              color: '#ffffff !important',
+              fontWeight: 700,
+              textTransform: 'none',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              border: '2px solid #388e3c',
+              px: 3,
+              py: 1,
+              '&:hover': {
+                bgcolor: '#2e7d32 !important',
+                background: '#2e7d32 !important',
+                backgroundImage: 'none !important',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              },
+              '&:disabled': {
+                bgcolor: 'rgba(0, 0, 0, 0.12) !important',
+                background: 'rgba(0, 0, 0, 0.12) !important',
+                backgroundImage: 'none !important',
+                color: 'rgba(0, 0, 0, 0.26) !important',
+                border: '2px solid rgba(0, 0, 0, 0.12)',
+              },
+            }}
+          >
+            Export Excel
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={handleOpenDialog}
+          >
+            Apply Leaves
+          </Button>
+        </Box>
       </Box>
 
       {/* Filters Section */}
@@ -514,9 +619,20 @@ export default function LeavesPage() {
                           : 'N/A'}
                       </TableCell>
                       <TableCell>
-                        {leave.user?.manager
-                          ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
-                          : 'N/A'}
+                        {(() => {
+                          // Check if there's an approval record with an approver
+                          if (leave.approvals && leave.approvals.length > 0) {
+                            const latestApproval = leave.approvals[0];
+                            if (latestApproval.approver) {
+                              return `${latestApproval.approver.firstName} ${latestApproval.approver.lastName}`;
+                            }
+                          }
+                          // Fall back to reporting manager
+                          if (leave.user?.manager) {
+                            return `${leave.user.manager.firstName} ${leave.user.manager.lastName}`;
+                          }
+                          return 'N/A';
+                        })()}
                       </TableCell>
                       <TableCell>
                         {leave.reason.substring(0, 50)}

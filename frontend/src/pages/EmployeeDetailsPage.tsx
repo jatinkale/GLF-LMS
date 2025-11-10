@@ -34,8 +34,10 @@ import {
   Cancel,
   GroupAdd as GroupAddIcon,
   ManageAccounts as ManageAccountsIcon,
+  Download,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams, GridRowSelectionModel } from '@mui/x-data-grid';
+import * as XLSX from 'xlsx';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import { gradients } from '../theme/theme';
@@ -581,6 +583,78 @@ export default function EmployeeDetailsPage() {
 
   const employees = employeesData || [];
 
+  // Export to Excel function
+  const handleExportToExcel = () => {
+    try {
+      if (!employees || employees.length === 0) {
+        toast.error('No employees to export');
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = employees.map((emp: Employee) => ({
+        'Employee ID': emp.employeeId,
+        'First Name': emp.firstName,
+        'Last Name': emp.lastName,
+        'Gender': emp.gender || '-',
+        'Email': emp.email,
+        'Phone Number': emp.phoneNumber || '-',
+        'Date of Joining': emp.dateOfJoining ? new Date(emp.dateOfJoining).toLocaleDateString() : '-',
+        'Exit Date': emp.exitDate ? new Date(emp.exitDate).toLocaleDateString() : '-',
+        'Location': emp.location || '-',
+        'Designation': emp.designation || '-',
+        'Department': emp.department || '-',
+        'Employment Type': emp.employmentType || '-',
+        'Reporting Manager': emp.reportingManager || '-',
+        'Reporting Manager ID': emp.reportingManagerId || '-',
+        'LMS Access': emp.lmsAccess || '-',
+        'LMS User Created': emp.lmsUserCreated ? 'Yes' : 'No',
+        'Active': emp.isActive ? 'Yes' : 'No',
+      }));
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 15 }, // Employee ID
+        { wch: 15 }, // First Name
+        { wch: 15 }, // Last Name
+        { wch: 10 }, // Gender
+        { wch: 30 }, // Email
+        { wch: 15 }, // Phone Number
+        { wch: 15 }, // Date of Joining
+        { wch: 15 }, // Exit Date
+        { wch: 15 }, // Location
+        { wch: 20 }, // Designation
+        { wch: 20 }, // Department
+        { wch: 18 }, // Employment Type
+        { wch: 25 }, // Reporting Manager
+        { wch: 20 }, // Reporting Manager ID
+        { wch: 12 }, // LMS Access
+        { wch: 18 }, // LMS User Created
+        { wch: 10 }, // Active
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees');
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `Employees_${timestamp}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast.success(`Exported ${employees.length} employee(s) to Excel`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data to Excel');
+    }
+  };
+
   return (
     <Box>
       {/* Header */}
@@ -626,6 +700,38 @@ export default function EmployeeDetailsPage() {
               }}
             >
               Import Excel
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Download />}
+              onClick={handleExportToExcel}
+              disabled={employees.length === 0}
+              sx={{
+                bgcolor: '#388e3c !important',
+                background: '#388e3c !important',
+                backgroundImage: 'none !important',
+                color: '#ffffff !important',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                border: '2px solid #388e3c',
+                px: 3,
+                py: 1,
+                '&:hover': {
+                  bgcolor: '#2e7d32 !important',
+                  background: '#2e7d32 !important',
+                  backgroundImage: 'none !important',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                },
+                '&:disabled': {
+                  bgcolor: 'rgba(0, 0, 0, 0.12) !important',
+                  background: 'rgba(0, 0, 0, 0.12) !important',
+                  backgroundImage: 'none !important',
+                  color: 'rgba(0, 0, 0, 0.26) !important',
+                  border: '2px solid rgba(0, 0, 0, 0.12)',
+                },
+              }}
+            >
+              Export Excel
             </Button>
             <Button
               variant="contained"

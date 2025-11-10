@@ -49,12 +49,14 @@ import {
   Close,
   Add,
   People,
+  Download,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
+import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../config/api';
@@ -605,6 +607,66 @@ export default function DashboardPage() {
     return fullName.includes(search) || emp.employeeId.toLowerCase().includes(search);
   });
 
+  // Export to Excel function
+  const handleExportToExcel = () => {
+    try {
+      // Get all unique leave type codes from the data
+      const leaveTypeCodes = Array.from(new Set(
+        (employeesData || []).flatMap((emp: EmployeeWithBalances) =>
+          (emp.leaveBalances || []).map(lb => lb.leaveType.leaveTypeCode)
+        )
+      )).sort();
+
+      // Prepare data for export
+      const exportData = filteredEmployees.map((emp: EmployeeWithBalances) => {
+        const row: any = {
+          'Employee ID': emp.employeeId,
+          'Employee Name': `${emp.firstName} ${emp.lastName}`,
+          'Location': emp.location || '-',
+          'Employment Type': emp.employmentType || '-',
+        };
+
+        // Add leave balances as columns
+        leaveTypeCodes.forEach((leaveCode: any) => {
+          const balance = emp.leaveBalances.find(lb => lb.leaveType.leaveTypeCode === leaveCode);
+          const columnName = leaveCode === 'COMP' ? 'COMP OFF' : leaveCode;
+          row[columnName] = balance?.available || 0;
+        });
+
+        return row;
+      });
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 15 }, // Employee ID
+        { wch: 25 }, // Employee Name
+        { wch: 15 }, // Location
+        { wch: 18 }, // Employment Type
+        ...leaveTypeCodes.map(() => ({ wch: 12 })), // Leave balance columns
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Employee Leave Balances');
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `Employee_Leave_Balances_${timestamp}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast.success(`Exported ${filteredEmployees.length} employee records to Excel`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data to Excel');
+    }
+  };
+
   // Admin Dashboard
   if (isAdmin) {
     // Define columns for employee grid
@@ -749,20 +811,55 @@ export default function DashboardPage() {
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
               Active Employees & Leave Balances
             </Typography>
-            <TextField
-              placeholder="Search by employee name or ID..."
-              size="small"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              sx={{ width: 300 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search />
-                  </InputAdornment>
-                ),
-              }}
-            />
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Button
+                variant="contained"
+                startIcon={<Download />}
+                onClick={handleExportToExcel}
+                disabled={filteredEmployees.length === 0}
+                sx={{
+                  bgcolor: '#388e3c !important',
+                  background: '#388e3c !important',
+                  backgroundImage: 'none !important',
+                  color: '#ffffff !important',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  border: '2px solid #388e3c',
+                  px: 3,
+                  py: 1,
+                  '&:hover': {
+                    bgcolor: '#2e7d32 !important',
+                    background: '#2e7d32 !important',
+                    backgroundImage: 'none !important',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  },
+                  '&:disabled': {
+                    bgcolor: 'rgba(0, 0, 0, 0.12) !important',
+                    background: 'rgba(0, 0, 0, 0.12) !important',
+                    backgroundImage: 'none !important',
+                    color: 'rgba(0, 0, 0, 0.26) !important',
+                    border: '2px solid rgba(0, 0, 0, 0.12)',
+                  },
+                }}
+              >
+                Export Excel
+              </Button>
+              <TextField
+                placeholder="Search by employee name or ID..."
+                size="small"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                sx={{ width: 300 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
           </Box>
 
           <DataGrid
@@ -1023,9 +1120,20 @@ export default function DashboardPage() {
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
-                          {leave.user?.manager
-                            ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
-                            : 'N/A'}
+                          {(() => {
+                            // Check if there's an approval record with an approver
+                            if (leave.approvals && leave.approvals.length > 0) {
+                              const latestApproval = leave.approvals[0];
+                              if (latestApproval.approver) {
+                                return `${latestApproval.approver.firstName} ${latestApproval.approver.lastName}`;
+                              }
+                            }
+                            // Fall back to reporting manager
+                            if (leave.user?.manager) {
+                              return `${leave.user.manager.firstName} ${leave.user.manager.lastName}`;
+                            }
+                            return 'N/A';
+                          })()}
                         </TableCell>
                         <TableCell>
                           {leave.reason.substring(0, 30)}
@@ -1225,9 +1333,20 @@ export default function DashboardPage() {
                               : 'N/A'}
                           </TableCell>
                           <TableCell>
-                            {leave.user?.manager
-                              ? `${leave.user.manager.firstName} ${leave.user.manager.lastName}`
-                              : 'N/A'}
+                            {(() => {
+                              // Check if there's an approval record with an approver
+                              if (leave.approvals && leave.approvals.length > 0) {
+                                const latestApproval = leave.approvals[0];
+                                if (latestApproval.approver) {
+                                  return `${latestApproval.approver.firstName} ${latestApproval.approver.lastName}`;
+                                }
+                              }
+                              // Fall back to reporting manager
+                              if (leave.user?.manager) {
+                                return `${leave.user.manager.firstName} ${leave.user.manager.lastName}`;
+                              }
+                              return 'N/A';
+                            })()}
                           </TableCell>
                           <TableCell>
                             {leave.reason.substring(0, 30)}
