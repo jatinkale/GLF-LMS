@@ -276,24 +276,60 @@ export class LeavePolicyService {
         });
       }
 
-      // Audit log for bulk processing
+      // Audit log for bulk processing - log each leave type separately
       if (processedBy) {
-        const processedLeaveTypes = [];
-        if (casualLeave && casualLeave > 0) processedLeaveTypes.push(`CL: ${casualLeave} days`);
-        if (privilegeLeave && privilegeLeave > 0) processedLeaveTypes.push(`PL: ${privilegeLeave} days`);
-        if (plannedTimeOff && plannedTimeOff > 0) processedLeaveTypes.push(`PTO: ${plannedTimeOff} days`);
-        if (bereavementLeave && bereavementLeave > 0) processedLeaveTypes.push(`BL: ${bereavementLeave} days`);
-
-        await auditService.logLeaveBalanceBulkProcessed(
-          region,
-          employmentType,
-          month,
-          year,
-          employees.length,
-          processedLeaveTypes.join(', '),
-          processedBy,
-          req
-        );
+        if (casualLeave && casualLeave > 0) {
+          await auditService.logLeaveBalanceBulkProcessed(
+            region,
+            employmentType,
+            'CL',
+            month,
+            year,
+            employees.length,
+            casualLeave,
+            processedBy,
+            req
+          );
+        }
+        if (privilegeLeave && privilegeLeave > 0) {
+          await auditService.logLeaveBalanceBulkProcessed(
+            region,
+            employmentType,
+            'PL',
+            month,
+            year,
+            employees.length,
+            privilegeLeave,
+            processedBy,
+            req
+          );
+        }
+        if (plannedTimeOff && plannedTimeOff > 0) {
+          await auditService.logLeaveBalanceBulkProcessed(
+            region,
+            employmentType,
+            'PTO',
+            month,
+            year,
+            employees.length,
+            plannedTimeOff,
+            processedBy,
+            req
+          );
+        }
+        if (bereavementLeave && bereavementLeave > 0) {
+          await auditService.logLeaveBalanceBulkProcessed(
+            region,
+            employmentType,
+            'BL',
+            month,
+            year,
+            employees.length,
+            bereavementLeave,
+            processedBy,
+            req
+          );
+        }
       }
 
       return {

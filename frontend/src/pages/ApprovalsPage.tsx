@@ -26,7 +26,7 @@ import {
   Checkbox,
   Alert,
 } from '@mui/material';
-import { CheckCircle, Cancel, Search, Download } from '@mui/icons-material';
+import { CheckCircle, Cancel, Search, Download, Info } from '@mui/icons-material';
 import { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -44,6 +44,8 @@ export default function ApprovalsPage() {
   const [bulkRejectionReason, setBulkRejectionReason] = useState('');
   const [cancelDialog, setCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [rejectionInfoDialog, setRejectionInfoDialog] = useState(false);
+  const [selectedRejection, setSelectedRejection] = useState<any>(null);
 
   // Filter states
   const [regionFilter, setRegionFilter] = useState<string>('All');
@@ -438,18 +440,24 @@ export default function ApprovalsPage() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        {isAdmin ? 'All Leave Requests' : 'Team Leave Requests'}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
-        {isAdmin
-          ? 'View and manage all employee leave requests'
-          : 'Review and approve leave requests from your team'
-        }
-      </Typography>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+        <CheckCircle sx={{ fontSize: 40, color: 'primary.main' }} />
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Approvals
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {isAdmin
+              ? 'View and manage all employee leave requests'
+              : 'Review and approve leave requests from your team'
+            }
+          </Typography>
+        </Box>
+      </Box>
 
       {/* Filters */}
-      <Paper sx={{ p: 2, mt: 3, mb: 2 }}>
+      <Paper sx={{ p: 2, mb: 2 }}>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Region Filter - Admin only */}
           {isAdmin && (
@@ -776,11 +784,29 @@ export default function ApprovalsPage() {
                               Cancel
                             </Button>
                           ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {leave.status === 'APPROVED' && 'Approved'}
-                              {leave.status === 'REJECTED' && 'Rejected'}
-                              {leave.status === 'CANCELLED' && 'Cancelled'}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                {leave.status === 'APPROVED' && 'Approved'}
+                                {leave.status === 'REJECTED' && 'Rejected'}
+                                {leave.status === 'CANCELLED' && 'Cancelled'}
+                              </Typography>
+                              {leave.status === 'REJECTED' && (
+                                <Info
+                                  sx={{
+                                    fontSize: 16,
+                                    color: '#f857a6',
+                                    cursor: 'pointer',
+                                    '&:hover': {
+                                      color: '#c62828',
+                                    },
+                                  }}
+                                  onClick={() => {
+                                    setSelectedRejection(leave);
+                                    setRejectionInfoDialog(true);
+                                  }}
+                                />
+                              )}
+                            </Box>
                           )}
                         </TableCell>
                       </TableRow>
@@ -876,6 +902,71 @@ export default function ApprovalsPage() {
           >
             {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Leave'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rejection Info Dialog */}
+      <Dialog open={rejectionInfoDialog} onClose={() => setRejectionInfoDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Rejection Details</DialogTitle>
+        <DialogContent>
+          {selectedRejection && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Employee
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.user?.firstName} {selectedRejection.user?.lastName} ({selectedRejection.user?.employeeId})
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Leave Type
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.leaveType?.name}
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Leave Period
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {new Date(selectedRejection.startDate).toLocaleDateString()} - {new Date(selectedRejection.endDate).toLocaleDateString()} ({selectedRejection.totalDays} {selectedRejection.totalDays === 1 ? 'day' : 'days'})
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Rejected By
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.approvals && selectedRejection.approvals.length > 0 && selectedRejection.approvals.find((a: any) => a.status === 'REJECTED')
+                  ? `${selectedRejection.approvals.find((a: any) => a.status === 'REJECTED').approver?.firstName} ${selectedRejection.approvals.find((a: any) => a.status === 'REJECTED').approver?.lastName}`
+                  : 'N/A'}
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Rejection Date
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.rejectedDate
+                  ? new Date(selectedRejection.rejectedDate).toLocaleString()
+                  : selectedRejection.approvals && selectedRejection.approvals.length > 0 && selectedRejection.approvals.find((a: any) => a.status === 'REJECTED')?.rejectedDate
+                  ? new Date(selectedRejection.approvals.find((a: any) => a.status === 'REJECTED').rejectedDate).toLocaleString()
+                  : 'N/A'}
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Rejection Reason
+              </Typography>
+              <Paper sx={{ p: 2, bgcolor: '#fef0f0', border: '1px solid #f857a6' }}>
+                <Typography variant="body1">
+                  {selectedRejection.rejectionReason ||
+                    (selectedRejection.approvals && selectedRejection.approvals.length > 0 && selectedRejection.approvals.find((a: any) => a.status === 'REJECTED')?.comments) ||
+                    'No reason provided'}
+                </Typography>
+              </Paper>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectionInfoDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

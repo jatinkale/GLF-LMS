@@ -26,8 +26,9 @@ import {
   FormControlLabel,
   Radio,
   Alert,
+  Paper,
 } from '@mui/material';
-import { Add, Cancel, FilterList, Download } from '@mui/icons-material';
+import { Add, Cancel, FilterList, Download, Info } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -53,6 +54,8 @@ export default function LeavesPage() {
   const [cancelDialog, setCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
+  const [rejectionInfoDialog, setRejectionInfoDialog] = useState(false);
+  const [selectedRejection, setSelectedRejection] = useState<any>(null);
 
   // Filter states
   const [leaveTypeFilter, setLeaveTypeFilter] = useState<string>('all');
@@ -671,6 +674,21 @@ export default function LeavesPage() {
                           >
                             Cancel
                           </Button>
+                        ) : leave.status === 'REJECTED' ? (
+                          <Info
+                            sx={{
+                              fontSize: 20,
+                              color: '#f857a6',
+                              cursor: 'pointer',
+                              '&:hover': {
+                                color: '#c62828',
+                              },
+                            }}
+                            onClick={() => {
+                              setSelectedRejection(leave);
+                              setRejectionInfoDialog(true);
+                            }}
+                          />
                         ) : (
                           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                             -
@@ -829,6 +847,64 @@ export default function LeavesPage() {
           >
             {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Leave'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rejection Info Dialog */}
+      <Dialog open={rejectionInfoDialog} onClose={() => setRejectionInfoDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Rejection Details</DialogTitle>
+        <DialogContent>
+          {selectedRejection && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Leave Type
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.leaveType?.name}
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Leave Period
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {new Date(selectedRejection.startDate).toLocaleDateString()} - {new Date(selectedRejection.endDate).toLocaleDateString()} ({selectedRejection.totalDays} {selectedRejection.totalDays === 1 ? 'day' : 'days'})
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Rejected By
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.approvals && selectedRejection.approvals.length > 0 && selectedRejection.approvals.find((a: any) => a.status === 'REJECTED')
+                  ? `${selectedRejection.approvals.find((a: any) => a.status === 'REJECTED').approver?.firstName} ${selectedRejection.approvals.find((a: any) => a.status === 'REJECTED').approver?.lastName}`
+                  : 'N/A'}
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Rejection Date
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {selectedRejection.rejectedDate
+                  ? new Date(selectedRejection.rejectedDate).toLocaleString()
+                  : selectedRejection.approvals && selectedRejection.approvals.length > 0 && selectedRejection.approvals.find((a: any) => a.status === 'REJECTED')?.rejectedDate
+                  ? new Date(selectedRejection.approvals.find((a: any) => a.status === 'REJECTED').rejectedDate).toLocaleString()
+                  : 'N/A'}
+              </Typography>
+
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Rejection Reason
+              </Typography>
+              <Paper sx={{ p: 2, bgcolor: '#fef0f0', border: '1px solid #f857a6' }}>
+                <Typography variant="body1">
+                  {selectedRejection.rejectionReason ||
+                    (selectedRejection.approvals && selectedRejection.approvals.length > 0 && selectedRejection.approvals.find((a: any) => a.status === 'REJECTED')?.comments) ||
+                    'No reason provided'}
+                </Typography>
+              </Paper>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectionInfoDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

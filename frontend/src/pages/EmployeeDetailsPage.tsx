@@ -35,12 +35,12 @@ import {
   GroupAdd as GroupAddIcon,
   ManageAccounts as ManageAccountsIcon,
   Download,
+  People,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams, GridRowSelectionModel } from '@mui/x-data-grid';
 import * as XLSX from 'xlsx';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import { gradients } from '../theme/theme';
 
 interface Employee {
   employeeId: string;
@@ -128,6 +128,13 @@ export default function EmployeeDetailsPage() {
   const [lmsUserRole, setLmsUserRole] = useState<'EMPLOYEE' | 'MANAGER'>('EMPLOYEE');
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'reset' | 'toggle' | 'delete' | null>(null);
+
+  // Filter states
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [locationFilter, setLocationFilter] = useState<string>('All');
+  const [reportingManagerFilter, setReportingManagerFilter] = useState<string>('All');
+  const [lmsUserCreatedFilter, setLmsUserCreatedFilter] = useState<string>('All');
 
   // Fetch all employees
   const { data: employeesData, isLoading, error, refetch } = useQuery({
@@ -403,10 +410,28 @@ export default function EmployeeDetailsPage() {
   };
 
   const handleSubmitAdd = () => {
-    // Validation - Manager fields are now optional
-    if (!formData.employeeId || !formData.firstName || !formData.lastName ||
-        !formData.email) {
-      toast.error('Please fill in all mandatory fields (Employee ID, First Name, Last Name, Email)');
+    // Validation - All fields are mandatory except Exit Date
+    const requiredFields = [
+      { value: formData.employeeId, name: 'Employee ID' },
+      { value: formData.firstName, name: 'First Name' },
+      { value: formData.lastName, name: 'Last Name' },
+      { value: formData.gender, name: 'Gender' },
+      { value: formData.email, name: 'Email ID' },
+      { value: formData.phoneNumber, name: 'Phone Number' },
+      { value: formData.dateOfJoining, name: 'Date of Joining' },
+      { value: formData.location, name: 'Location' },
+      { value: formData.designation, name: 'Designation' },
+      { value: formData.department, name: 'Department' },
+      { value: formData.employmentType, name: 'Employment Type' },
+      { value: formData.reportingManager, name: 'Reporting Manager' },
+      { value: formData.reportingManagerId, name: 'Reporting Manager ID' },
+    ];
+
+    const emptyFields = requiredFields.filter(field => !field.value || field.value.trim() === '');
+
+    if (emptyFields.length > 0) {
+      const fieldNames = emptyFields.map(field => field.name).join(', ');
+      toast.error(`Please fill in all mandatory fields: ${fieldNames}`);
       return;
     }
 
@@ -415,6 +440,30 @@ export default function EmployeeDetailsPage() {
 
   const handleSubmitEdit = () => {
     if (!selectedEmployee) return;
+
+    // Validation - All fields are mandatory except Exit Date
+    const requiredFields = [
+      { value: formData.firstName, name: 'First Name' },
+      { value: formData.lastName, name: 'Last Name' },
+      { value: formData.gender, name: 'Gender' },
+      { value: formData.email, name: 'Email ID' },
+      { value: formData.phoneNumber, name: 'Phone Number' },
+      { value: formData.dateOfJoining, name: 'Date of Joining' },
+      { value: formData.location, name: 'Location' },
+      { value: formData.designation, name: 'Designation' },
+      { value: formData.department, name: 'Department' },
+      { value: formData.employmentType, name: 'Employment Type' },
+      { value: formData.reportingManager, name: 'Reporting Manager' },
+      { value: formData.reportingManagerId, name: 'Reporting Manager ID' },
+    ];
+
+    const emptyFields = requiredFields.filter(field => !field.value || field.value.trim() === '');
+
+    if (emptyFields.length > 0) {
+      const fieldNames = emptyFields.map(field => field.name).join(', ');
+      toast.error(`Please fill in all mandatory fields: ${fieldNames}`);
+      return;
+    }
 
     updateMutation.mutate({
       employeeId: selectedEmployee.employeeId,
@@ -583,6 +632,50 @@ export default function EmployeeDetailsPage() {
 
   const employees = employeesData || [];
 
+  // Get unique values for filter dropdowns
+  const locations = employees.map((emp: Employee) => emp.location).filter(Boolean);
+  const uniqueLocations = ['All', ...Array.from(new Set(locations)).sort()];
+
+  const managers = employees.map((emp: Employee) => emp.reportingManager).filter(Boolean);
+  const uniqueReportingManagers = ['All', ...Array.from(new Set(managers)).sort()];
+
+  // Apply filters to employees
+  const filteredEmployees = employees.filter((emp: Employee) => {
+    // Search filter (Employee Name or Employee ID)
+    if (searchText) {
+      const searchLower = searchText.toLowerCase();
+      const fullName = `${emp.firstName} ${emp.lastName}`.toLowerCase();
+      const matchesSearch =
+        fullName.includes(searchLower) ||
+        emp.employeeId.toLowerCase().includes(searchLower);
+      if (!matchesSearch) return false;
+    }
+
+    // Status filter
+    if (statusFilter !== 'All') {
+      if (statusFilter === 'Active' && !emp.isActive) return false;
+      if (statusFilter === 'Inactive' && emp.isActive) return false;
+    }
+
+    // Location filter
+    if (locationFilter !== 'All' && emp.location !== locationFilter) {
+      return false;
+    }
+
+    // Reporting Manager filter
+    if (reportingManagerFilter !== 'All' && emp.reportingManager !== reportingManagerFilter) {
+      return false;
+    }
+
+    // LMS User Created filter
+    if (lmsUserCreatedFilter !== 'All') {
+      if (lmsUserCreatedFilter === 'Yes' && !emp.lmsUserCreated) return false;
+      if (lmsUserCreatedFilter === 'No' && emp.lmsUserCreated) return false;
+    }
+
+    return true;
+  });
+
   // Export to Excel function
   const handleExportToExcel = () => {
     try {
@@ -658,110 +751,103 @@ export default function EmployeeDetailsPage() {
   return (
     <Box>
       {/* Header */}
-      <Box
-        sx={{
-          background: gradients.primary,
-          borderRadius: 3,
-          p: 3,
-          mb: 3,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <People sx={{ fontSize: 40, color: 'primary.main' }} />
           <Box>
-            <Typography variant="h4" sx={{ color: 'white', fontWeight: 700, mb: 1 }}>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>
               Employee Management
             </Typography>
-            <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+            <Typography variant="body2" color="text.secondary">
               Manage employee records and import data
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<UploadIcon />}
-              onClick={() => setImportDialogOpen(true)}
-              sx={{
-                bgcolor: '#4caf50 !important',
-                background: '#4caf50 !important',
-                backgroundImage: 'none !important',
-                color: '#ffffff !important',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                border: '2px solid #4caf50',
-                px: 3,
-                py: 1,
-                '&:hover': {
-                  bgcolor: '#388e3c !important',
-                  background: '#388e3c !important',
-                  backgroundImage: 'none !important',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                },
-              }}
-            >
-              Import Excel
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<Download />}
-              onClick={handleExportToExcel}
-              disabled={employees.length === 0}
-              sx={{
+        </Box>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={<UploadIcon />}
+            onClick={() => setImportDialogOpen(true)}
+            sx={{
+              bgcolor: '#4caf50 !important',
+              background: '#4caf50 !important',
+              backgroundImage: 'none !important',
+              color: '#ffffff !important',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              border: '2px solid #4caf50',
+              px: 3,
+              py: 1,
+              '&:hover': {
                 bgcolor: '#388e3c !important',
                 background: '#388e3c !important',
                 backgroundImage: 'none !important',
-                color: '#ffffff !important',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                border: '2px solid #388e3c',
-                px: 3,
-                py: 1,
-                '&:hover': {
-                  bgcolor: '#2e7d32 !important',
-                  background: '#2e7d32 !important',
-                  backgroundImage: 'none !important',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                },
-                '&:disabled': {
-                  bgcolor: 'rgba(0, 0, 0, 0.12) !important',
-                  background: 'rgba(0, 0, 0, 0.12) !important',
-                  backgroundImage: 'none !important',
-                  color: 'rgba(0, 0, 0, 0.26) !important',
-                  border: '2px solid rgba(0, 0, 0, 0.12)',
-                },
-              }}
-            >
-              Export Excel
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAddEmployee}
-              sx={{
-                bgcolor: '#2196f3 !important',
-                background: '#2196f3 !important',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              },
+            }}
+          >
+            Import Excel
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Download />}
+            onClick={handleExportToExcel}
+            disabled={employees.length === 0}
+            sx={{
+              bgcolor: '#388e3c !important',
+              background: '#388e3c !important',
+              backgroundImage: 'none !important',
+              color: '#ffffff !important',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              border: '2px solid #388e3c',
+              px: 3,
+              py: 1,
+              '&:hover': {
+                bgcolor: '#2e7d32 !important',
+                background: '#2e7d32 !important',
                 backgroundImage: 'none !important',
-                color: '#ffffff !important',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                border: '2px solid #2196f3',
-                px: 3,
-                py: 1,
-                '&:hover': {
-                  bgcolor: '#1976d2 !important',
-                  background: '#1976d2 !important',
-                  backgroundImage: 'none !important',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                },
-              }}
-            >
-              Add Employee
-            </Button>
-          </Box>
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              },
+              '&:disabled': {
+                bgcolor: 'rgba(0, 0, 0, 0.12) !important',
+                background: 'rgba(0, 0, 0, 0.12) !important',
+                backgroundImage: 'none !important',
+                color: 'rgba(0, 0, 0, 0.26) !important',
+                border: '2px solid rgba(0, 0, 0, 0.12)',
+              },
+            }}
+          >
+            Export Excel
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddEmployee}
+            sx={{
+              bgcolor: '#2196f3 !important',
+              background: '#2196f3 !important',
+              backgroundImage: 'none !important',
+              color: '#ffffff !important',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              border: '2px solid #2196f3',
+              px: 3,
+              py: 1,
+              '&:hover': {
+                bgcolor: '#1976d2 !important',
+                background: '#1976d2 !important',
+                backgroundImage: 'none !important',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              },
+            }}
+          >
+            Add Employee
+          </Button>
         </Box>
       </Box>
 
-      {/* Data Grid */}
+      {/* Data Grid Section */}
       <Paper
         sx={{
           p: 2,
@@ -769,6 +855,103 @@ export default function EmployeeDetailsPage() {
           boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
         }}
       >
+        {/* Quick Filters */}
+        <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            Quick Filters
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
+                fullWidth
+                label="Search Employee Name or ID"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Enter name or employee ID"
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={statusFilter}
+                  label="Status"
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <MenuItem value="All">All</MenuItem>
+                  <MenuItem value="Active">Active</MenuItem>
+                  <MenuItem value="Inactive">Inactive</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Location</InputLabel>
+                <Select
+                  value={locationFilter}
+                  label="Location"
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                >
+                  {uniqueLocations.map((loc) => (
+                    <MenuItem key={loc} value={loc}>
+                      {loc}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Reporting Manager</InputLabel>
+                <Select
+                  value={reportingManagerFilter}
+                  label="Reporting Manager"
+                  onChange={(e) => setReportingManagerFilter(e.target.value)}
+                >
+                  {uniqueReportingManagers.map((mgr) => (
+                    <MenuItem key={mgr} value={mgr}>
+                      {mgr}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>LMS User Created</InputLabel>
+                <Select
+                  value={lmsUserCreatedFilter}
+                  label="LMS User Created"
+                  onChange={(e) => setLmsUserCreatedFilter(e.target.value)}
+                >
+                  <MenuItem value="All">All</MenuItem>
+                  <MenuItem value="Yes">Yes</MenuItem>
+                  <MenuItem value="No">No</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Showing {filteredEmployees.length} of {employees.length} employees
+            </Typography>
+            <Button
+              size="small"
+              onClick={() => {
+                setSearchText('');
+                setStatusFilter('All');
+                setLocationFilter('All');
+                setReportingManagerFilter('All');
+                setLmsUserCreatedFilter('All');
+              }}
+              sx={{ textTransform: 'none' }}
+            >
+              Clear All Filters
+            </Button>
+          </Box>
+        </Box>
+
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
           <Button
             variant="contained"
@@ -813,7 +996,7 @@ export default function EmployeeDetailsPage() {
           </Button>
         </Box>
         <DataGrid
-          rows={employees}
+          rows={filteredEmployees}
           columns={columns}
           getRowId={(row) => row.employeeId}
           initialState={{
@@ -823,6 +1006,7 @@ export default function EmployeeDetailsPage() {
           }}
           pageSizeOptions={[5, 10, 25, 50]}
           checkboxSelection
+          disableColumnFilter
           onRowSelectionModelChange={(newSelection) => {
             console.log('Selection changed:', newSelection);
             setSelectedRows(newSelection);
@@ -884,7 +1068,7 @@ export default function EmployeeDetailsPage() {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
+              <FormControl fullWidth required>
                 <InputLabel>Gender</InputLabel>
                 <Select
                   value={formData.gender}
@@ -910,6 +1094,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Phone Number"
                 value={formData.phoneNumber}
                 onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
@@ -939,6 +1124,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Location"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
@@ -947,6 +1133,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Designation"
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
@@ -955,13 +1142,14 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Department"
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
+              <FormControl fullWidth required>
                 <InputLabel>Employment Type</InputLabel>
                 <Select
                   value={formData.employmentType}
@@ -978,6 +1166,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Reporting Manager"
                 placeholder="Enter 'NA' if no manager"
                 value={formData.reportingManager}
@@ -987,6 +1176,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Reporting Manager ID"
                 placeholder="Enter 'NA' if no manager"
                 value={formData.reportingManagerId}
@@ -1072,7 +1262,7 @@ export default function EmployeeDetailsPage() {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
+              <FormControl fullWidth required>
                 <InputLabel>Gender</InputLabel>
                 <Select
                   value={formData.gender}
@@ -1098,6 +1288,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Phone Number"
                 value={formData.phoneNumber}
                 onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
@@ -1127,6 +1318,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Location"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
@@ -1135,6 +1327,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Designation"
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
@@ -1143,13 +1336,14 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Department"
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
+              <FormControl fullWidth required>
                 <InputLabel>Employment Type</InputLabel>
                 <Select
                   value={formData.employmentType}
@@ -1166,6 +1360,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Reporting Manager"
                 placeholder="Enter 'NA' if no manager"
                 value={formData.reportingManager}
@@ -1175,6 +1370,7 @@ export default function EmployeeDetailsPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Reporting Manager ID"
                 placeholder="Enter 'NA' if no manager"
                 value={formData.reportingManagerId}

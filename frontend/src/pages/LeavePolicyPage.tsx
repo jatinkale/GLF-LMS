@@ -26,7 +26,7 @@ import {
   Tab,
   Checkbox,
 } from '@mui/material';
-import { History as HistoryIcon, PlayArrow as PlayArrowIcon, Search as SearchIcon } from '@mui/icons-material';
+import { PlayArrow as PlayArrowIcon, Search as SearchIcon, Settings } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import { gradients } from '../theme/theme';
@@ -112,7 +112,6 @@ const YEARS = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - 2 
 
 export default function LeavePolicyPage() {
   const queryClient = useQueryClient();
-  const [showHistory, setShowHistory] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     region: 'IND' | 'US';
@@ -223,11 +222,68 @@ export default function LeavePolicyPage() {
 
   const leaveTypes: LeaveType[] = leaveTypesData || [];
 
-  // Fetch process history
-  const { data: historyData, isLoading: isLoadingHistory } = useQuery({
-    queryKey: ['leave-policy-history'],
+  // Fetch processed months for warnings - India FTE
+  const { data: indiaFTEProcessedMonths } = useQuery({
+    queryKey: ['processed-months', 'IND', 'FTE'],
     queryFn: async () => {
-      const response = await api.get('/admin/leave-policy/history');
+      const response = await api.get('/admin/leave-policy/processed-months', {
+        params: { region: 'IND', employmentType: 'FTE' },
+      });
+      return response.data.data;
+    },
+  });
+
+  // Fetch processed months for warnings - India FTDC
+  const { data: indiaFTDCProcessedMonths } = useQuery({
+    queryKey: ['processed-months', 'IND', 'FTDC'],
+    queryFn: async () => {
+      const response = await api.get('/admin/leave-policy/processed-months', {
+        params: { region: 'IND', employmentType: 'FTDC' },
+      });
+      return response.data.data;
+    },
+  });
+
+  // Fetch processed months for warnings - India CONSULTANT
+  const { data: indiaConsultantProcessedMonths } = useQuery({
+    queryKey: ['processed-months', 'IND', 'CONSULTANT'],
+    queryFn: async () => {
+      const response = await api.get('/admin/leave-policy/processed-months', {
+        params: { region: 'IND', employmentType: 'CONSULTANT' },
+      });
+      return response.data.data;
+    },
+  });
+
+  // Fetch processed months for warnings - US FTE
+  const { data: usFTEProcessedMonths } = useQuery({
+    queryKey: ['processed-months', 'US', 'FTE'],
+    queryFn: async () => {
+      const response = await api.get('/admin/leave-policy/processed-months', {
+        params: { region: 'US', employmentType: 'FTE' },
+      });
+      return response.data.data;
+    },
+  });
+
+  // Fetch processed months for warnings - US FTDC
+  const { data: usFTDCProcessedMonths } = useQuery({
+    queryKey: ['processed-months', 'US', 'FTDC'],
+    queryFn: async () => {
+      const response = await api.get('/admin/leave-policy/processed-months', {
+        params: { region: 'US', employmentType: 'FTDC' },
+      });
+      return response.data.data;
+    },
+  });
+
+  // Fetch processed months for warnings - US CONSULTANT
+  const { data: usConsultantProcessedMonths } = useQuery({
+    queryKey: ['processed-months', 'US', 'CONSULTANT'],
+    queryFn: async () => {
+      const response = await api.get('/admin/leave-policy/processed-months', {
+        params: { region: 'US', employmentType: 'CONSULTANT' },
+      });
       return response.data.data;
     },
   });
@@ -253,7 +309,8 @@ export default function LeavePolicyPage() {
       } else {
         toast.success(`Leaves processed successfully for ${variables.employmentType}!`);
       }
-      queryClient.invalidateQueries({ queryKey: ['leave-policy-history'] });
+      // Invalidate processed months query to refresh warnings
+      queryClient.invalidateQueries({ queryKey: ['processed-months', 'IND', variables.employmentType] });
       setConfirmDialog({ open: false, region: 'IND', data: null });
     },
     onError: (error: any) => {
@@ -283,7 +340,8 @@ export default function LeavePolicyPage() {
       } else {
         toast.success(`Leaves processed successfully for ${variables.employmentType}!`);
       }
-      queryClient.invalidateQueries({ queryKey: ['leave-policy-history'] });
+      // Invalidate processed months query to refresh warnings
+      queryClient.invalidateQueries({ queryKey: ['processed-months', 'US', variables.employmentType] });
       setConfirmDialog({ open: false, region: 'US', data: null });
     },
     onError: (error: any) => {
@@ -313,7 +371,6 @@ export default function LeavePolicyPage() {
     },
     onSuccess: () => {
       toast.success('Special leave processed successfully!');
-      queryClient.invalidateQueries({ queryKey: ['leave-policy-history'] });
       setSpecialLeaveForm({
         leaveType: '',
         action: 'ADD',
@@ -364,7 +421,6 @@ export default function LeavePolicyPage() {
     onSuccess: (data) => {
       setBulkConfirmDialog({ open: false, data: null });
       setBulkResultDialog({ open: true, data });
-      queryClient.invalidateQueries({ queryKey: ['leave-policy-history'] });
       // Clear selections
       setSelectedBulkEmployees([]);
       setBulkLeaveForm({
@@ -626,42 +682,55 @@ export default function LeavePolicyPage() {
     });
   };
 
+  // Helper function to format months for warning message
+  const formatMonthsWarning = (months: Array<{ month: number; year: number }> | undefined): string => {
+    if (!months || months.length === 0) return '';
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const formattedMonths = months.map(m => `${monthNames[m.month - 1]}-${m.year}`).join(', ');
+    return `Warning: Leaves for this employment type have been processed for ${formattedMonths}`;
+  };
+
+  // Function to get processed months for a specific employment type
+  const getProcessedMonthsForEmploymentType = (region: 'IND' | 'US', employmentType: string) => {
+    if (region === 'IND') {
+      if (employmentType === 'FTE') return indiaFTEProcessedMonths;
+      if (employmentType === 'FTDC') return indiaFTDCProcessedMonths;
+      if (employmentType === 'CONSULTANT') return indiaConsultantProcessedMonths;
+    } else {
+      if (employmentType === 'FTE') return usFTEProcessedMonths;
+      if (employmentType === 'FTDC') return usFTDCProcessedMonths;
+      if (employmentType === 'CONSULTANT') return usConsultantProcessedMonths;
+    }
+    return undefined;
+  };
+
+  // Warning component
+  const renderProcessedMonthsWarning = (region: 'IND' | 'US', employmentType: string) => {
+    const processedMonths = getProcessedMonthsForEmploymentType(region, employmentType);
+    if (!processedMonths || processedMonths.length === 0) return null;
+
+    const warningMessage = formatMonthsWarning(processedMonths);
+
+    return (
+      <Alert severity="error" sx={{ mt: 2 }}>
+        {warningMessage}
+      </Alert>
+    );
+  };
+
   return (
     <Box>
       {/* Header */}
-      <Box
-        sx={{
-          background: gradients.primary,
-          borderRadius: 3,
-          p: 3,
-          mb: 3,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box>
-            <Typography variant="h4" sx={{ color: 'white', fontWeight: 700, mb: 1 }}>
-              Leave Policy
-            </Typography>
-            <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.9)' }}>
-              Manage leave allocations by region and employment type
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            startIcon={<HistoryIcon />}
-            onClick={() => setShowHistory(true)}
-            sx={{
-              bgcolor: 'rgba(255,255,255,0.2) !important',
-              color: '#ffffff !important',
-              fontWeight: 600,
-              '&:hover': {
-                bgcolor: 'rgba(255,255,255,0.3) !important',
-              },
-            }}
-          >
-            Process History
-          </Button>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+        <Settings sx={{ fontSize: 40, color: 'primary.main' }} />
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Leave Allocations
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage leave allocations by region and employment type
+          </Typography>
         </Box>
       </Box>
 
@@ -760,6 +829,9 @@ export default function LeavePolicyPage() {
                     </Button>
                   </Grid>
                 </Grid>
+
+                {/* Warning for processed months */}
+                {renderProcessedMonthsWarning('IND', empType.employmentType)}
               </Paper>
             </Grid>
           ))}
@@ -861,6 +933,9 @@ export default function LeavePolicyPage() {
                     </Button>
                   </Grid>
                 </Grid>
+
+                {/* Warning for processed months */}
+                {renderProcessedMonthsWarning('US', empType.employmentType)}
               </Paper>
             </Grid>
           ))}
@@ -1341,74 +1416,6 @@ export default function LeavePolicyPage() {
           >
             {(processLeavesMutation.isPending || processUSLeavesMutation.isPending) ? 'Processing...' : 'Confirm & Process'}
           </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* History Dialog */}
-      <Dialog
-        open={showHistory}
-        onClose={() => setShowHistory(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>Leave Processing History</DialogTitle>
-        <DialogContent>
-          {isLoadingHistory ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell><strong>Region</strong></TableCell>
-                    <TableCell><strong>Employment Type</strong></TableCell>
-                    <TableCell><strong>Period</strong></TableCell>
-                    <TableCell><strong>Leave Types</strong></TableCell>
-                    <TableCell><strong>Employees</strong></TableCell>
-                    <TableCell><strong>Processed By</strong></TableCell>
-                    <TableCell><strong>Processed At</strong></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {historyData && historyData.length > 0 ? (
-                    historyData.map((record: any, index: number) => (
-                      <TableRow key={index}>
-                        <TableCell>{record.region}</TableCell>
-                        <TableCell>
-                          {EMPLOYMENT_TYPES.find((et) => et.value === record.employmentType)?.label || record.employmentType}
-                        </TableCell>
-                        <TableCell>{getMonthYearLabel(record.processMonth, record.processYear)}</TableCell>
-                        <TableCell>
-                          {record.leaveTypes.map((lt: any, idx: number) => (
-                            <Chip
-                              key={idx}
-                              label={`${lt.leaveTypeCode}: ${lt.daysProcessed} days`}
-                              size="small"
-                              sx={{ mr: 0.5, mb: 0.5 }}
-                            />
-                          ))}
-                        </TableCell>
-                        <TableCell>{record.employeesCount}</TableCell>
-                        <TableCell>{record.processedBy}</TableCell>
-                        <TableCell>{new Date(record.processedAt).toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} align="center">
-                        No processing history found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowHistory(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 

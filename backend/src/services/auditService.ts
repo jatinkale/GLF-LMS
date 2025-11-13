@@ -105,7 +105,13 @@ class AuditService {
     // Safely extract IP address
     let ipAddress: string | undefined;
     try {
-      ipAddress = (req.ip || req.socket?.remoteAddress || '').replace('::ffff:', '');
+      if (req.ip) {
+        ipAddress = req.ip.replace('::ffff:', '');
+      } else if (req.socket && req.socket.remoteAddress) {
+        ipAddress = req.socket.remoteAddress.replace('::ffff:', '');
+      } else {
+        ipAddress = undefined;
+      }
     } catch (error) {
       ipAddress = undefined;
     }
@@ -113,7 +119,13 @@ class AuditService {
     // Safely extract user agent
     let userAgent: string | undefined;
     try {
-      userAgent = typeof req.get === 'function' ? req.get('user-agent') : undefined;
+      if (typeof req.get === 'function') {
+        userAgent = req.get('user-agent');
+      } else if (req.headers && req.headers['user-agent']) {
+        userAgent = req.headers['user-agent'] as string;
+      } else {
+        userAgent = undefined;
+      }
     } catch (error) {
       userAgent = undefined;
     }

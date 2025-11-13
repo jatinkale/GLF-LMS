@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
   { text: 'Approvals', icon: <CheckCircle />, path: '/approvals', roles: ['MANAGER', 'HR', 'ADMIN'] },
   { text: 'Employee Management', icon: <People />, path: '/employees', roles: ['ADMIN'] },
   { text: 'Holiday Calendar', icon: <CalendarMonth />, path: '/holiday-calendar', roles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
-  { text: 'Leave Policy', icon: <Settings />, path: '/leave-policy', roles: ['ADMIN'] },
+  { text: 'Leave Allocations', icon: <Settings />, path: '/leave-policy', roles: ['ADMIN'] },
   { text: 'Profile', icon: <Person />, path: '/profile', roles: ['EMPLOYEE', 'MANAGER', 'HR'] },
   { text: 'Audit Logs', icon: <Assessment />, path: '/audit-logs', roles: ['ADMIN'] },
 ];

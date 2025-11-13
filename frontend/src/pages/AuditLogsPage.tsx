@@ -20,7 +20,7 @@ import {
   Alert,
   InputAdornment,
 } from '@mui/material';
-import { Download, Refresh, FilterAlt, Clear } from '@mui/icons-material';
+import { Download, Refresh, FilterAlt, Clear, Assessment } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import api from '../config/api';
 import toast from 'react-hot-toast';
@@ -316,13 +316,17 @@ const AuditLogsPage = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Audit Logs
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          View comprehensive logs of all system activities and user actions
-        </Typography>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+        <Assessment sx={{ fontSize: 40, color: 'primary.main' }} />
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Audit Logs
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            View comprehensive logs of all system activities and user actions
+          </Typography>
+        </Box>
       </Box>
 
       {/* Error Display */}

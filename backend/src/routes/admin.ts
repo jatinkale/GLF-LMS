@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import prisma from '../config/database';
 import leavePolicyService from '../services/leavePolicyService';
+import auditService from '../services/auditService';
 import { Region, EmployeeType } from '@prisma/client';
 
 const router = express.Router();
@@ -193,8 +194,8 @@ router.post('/leave-policy/process', async (req: Request, res: Response) => {
       });
     }
 
-    // Get user email from request
-    const userEmail = (req as any).user?.email || 'Unknown';
+    // Get user employeeId from request (needed for audit logging)
+    const performerEmployeeId = (req as any).user?.employeeId || 'Unknown';
 
     const result = await leavePolicyService.processLeaves({
       region: region as Region,
@@ -205,7 +206,7 @@ router.post('/leave-policy/process', async (req: Request, res: Response) => {
       privilegeLeave: privilegeLeave !== undefined ? parseFloat(privilegeLeave) : undefined,
       plannedTimeOff: plannedTimeOff !== undefined ? parseFloat(plannedTimeOff) : undefined,
       bereavementLeave: bereavementLeave !== undefined ? parseFloat(bereavementLeave) : undefined,
-      processedBy: userEmail,
+      processedBy: performerEmployeeId,
       req: req,
     });
 
@@ -269,6 +270,93 @@ router.post('/leave-policy/check-exists', async (req: Request, res: Response) =>
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to check processing history',
+    });
+  }
+});
+
+// Get processed months from audit logs for warnings
+router.get('/leave-policy/processed-months', async (req: Request, res: Response) => {
+  try {
+    const { region, employmentType } = req.query;
+
+    if (!region || !employmentType) {
+      return res.status(400).json({
+        success: false,
+        message: 'Region and Employment Type are required',
+      });
+    }
+
+    // Get current date info
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+
+    // Calculate date range: 2 months ago to future
+    const twoMonthsAgo = new Date(now);
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const startDate = new Date(twoMonthsAgo.getFullYear(), twoMonthsAgo.getMonth(), 1);
+
+    // Query audit logs for bulk processing
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        action: 'LEAVE_BALANCE_BULK_PROCESSED',
+        timestamp: {
+          gte: startDate,
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    // Filter and extract unique months
+    const processedMonths = new Set<string>();
+
+    auditLogs.forEach((log) => {
+      if (log.newValues) {
+        try {
+          const values = typeof log.newValues === 'string' ? JSON.parse(log.newValues) : log.newValues;
+
+          // Check if this log matches the requested region and employment type
+          if (values.region === region && values.employmentType === employmentType) {
+            const month = values.month;
+            const year = values.year;
+
+            // Check if this is current month, last 2 months, or future month
+            const logDate = new Date(year, month - 1, 1);
+            const isRelevant = logDate >= startDate || logDate > now;
+
+            if (isRelevant) {
+              processedMonths.add(`${month}-${year}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing audit log newValues:', error);
+        }
+      }
+    });
+
+    // Convert to array and sort
+    const monthsArray = Array.from(processedMonths).map((monthYear) => {
+      const [month, year] = monthYear.split('-').map(Number);
+      return { month, year };
+    });
+
+    // Sort by year and month
+    monthsArray.sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    });
+
+    res.json({
+      success: true,
+      data: monthsArray,
+    });
+  } catch (error: any) {
+    console.error('Error fetching processed months:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch processed months',
     });
   }
 });
@@ -537,8 +625,41 @@ router.post('/leave-policy/process-special', async (req: Request, res: Response)
       }
     }
 
-    // Record in history - use employee's actual region and employment type
+    // Audit logging
     const userEmail = (req as any).user?.email || 'Unknown';
+    const performerEmployeeId = (req as any).user?.employeeId || userEmail;
+
+    if (action === 'ADD') {
+      await auditService.logLeaveBalanceAllocated(
+        employeeId,
+        leaveTypeCode,
+        currentYear,
+        leaves,
+        performerEmployeeId,
+        req
+      );
+    } else {
+      // For REMOVE, log as adjustment with before/after values
+      const afterBalance = await prisma.leaveBalance.findFirst({
+        where: {
+          employeeId: employeeId,
+          leaveTypeCode: leaveTypeCode,
+          year: currentYear,
+        },
+      });
+
+      await auditService.logLeaveBalanceAdjusted(
+        employeeId,
+        leaveTypeCode,
+        currentYear,
+        { allocated: (afterBalance?.allocated || 0) + leaves, available: (afterBalance?.available || 0) + leaves },
+        { allocated: afterBalance?.allocated || 0, available: afterBalance?.available || 0 },
+        performerEmployeeId,
+        req
+      );
+    }
+
+    // Record in history - use employee's actual region and employment type
     await prisma.leaveProcessHistory.create({
       data: {
         region: user.region || 'IND', // Use employee's region, default to IND if null
@@ -827,6 +948,38 @@ router.post('/leave-policy/process-special-bulk', async (req: Request, res: Resp
         }
 
         processed.push(`${user.firstName} ${user.lastName} (${user.employeeId})`);
+
+        // Audit logging for each processed employee
+        const performerEmployeeId = (req as any).user?.employeeId || (req as any).user?.email || 'Unknown';
+        if (action === 'ADD') {
+          await auditService.logLeaveBalanceAllocated(
+            user.employeeId,
+            leaveTypeCode,
+            currentYear,
+            leaves,
+            performerEmployeeId,
+            req
+          );
+        } else {
+          // For REMOVE, log as adjustment with before/after values
+          const afterBalance = await prisma.leaveBalance.findFirst({
+            where: {
+              employeeId: user.employeeId,
+              leaveTypeCode: leaveTypeCode,
+              year: currentYear,
+            },
+          });
+
+          await auditService.logLeaveBalanceAdjusted(
+            user.employeeId,
+            leaveTypeCode,
+            currentYear,
+            { allocated: (afterBalance?.allocated || 0) + leaves, available: (afterBalance?.available || 0) + leaves },
+            { allocated: afterBalance?.allocated || 0, available: afterBalance?.available || 0 },
+            performerEmployeeId,
+            req
+          );
+        }
       } catch (err: any) {
         errors.push(`${user.firstName} ${user.lastName} (${user.employeeId}): ${err.message}`);
       }
