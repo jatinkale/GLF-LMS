@@ -1,11 +1,13 @@
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { Request } from 'express';
+import auditService from './auditService';
 
 const prisma = new PrismaClient();
 
 export class UserManagementService {
   // Create LMS user for an employee
-  async createUserForEmployee(employeeId: string, role: Role = 'EMPLOYEE') {
+  async createUserForEmployee(employeeId: string, role: Role = 'EMPLOYEE', performedBy?: string, req?: Request) {
     try {
       // Find employee
       const employee = await prisma.employee.findUnique({
@@ -99,6 +101,16 @@ export class UserManagementService {
 
       await Promise.all(leaveBalancePromises);
 
+      // Audit log
+      if (performedBy) {
+        await auditService.logLMSUserCreated(
+          user.employeeId,
+          user,
+          performedBy,
+          req
+        );
+      }
+
       return user;
     } catch (error) {
       console.error('Error creating user for employee:', error);
@@ -140,7 +152,7 @@ export class UserManagementService {
   }
 
   // Reset user password to default
-  async resetPassword(employeeId: string) {
+  async resetPassword(employeeId: string, performedBy?: string, req?: Request) {
     try {
       const user = await prisma.user.findUnique({
         where: { employeeId }
@@ -160,6 +172,14 @@ export class UserManagementService {
         }
       });
 
+      // Audit log - always log password resets
+      await auditService.logLMSUserPasswordReset(
+        employeeId,
+        `${user.firstName} ${user.lastName}`,
+        performedBy || 'SYSTEM',
+        req
+      );
+
       return { message: 'Password reset successfully' };
     } catch (error) {
       console.error('Error resetting password:', error);
@@ -168,7 +188,7 @@ export class UserManagementService {
   }
 
   // Enable or disable user
-  async toggleUserStatus(employeeId: string, isActive: boolean) {
+  async toggleUserStatus(employeeId: string, isActive: boolean, performedBy?: string, req?: Request) {
     try {
       const user = await prisma.user.findUnique({
         where: { employeeId }
@@ -177,6 +197,9 @@ export class UserManagementService {
       if (!user) {
         throw new Error('User not found');
       }
+
+      // Save old status before updating
+      const oldStatus = user.isActive;
 
       // If enabling user, check if the corresponding employee is active
       if (isActive) {
@@ -202,6 +225,15 @@ export class UserManagementService {
         }
       });
 
+      // Audit log - always log status changes
+      await auditService.logLMSUserStatusChanged(
+        employeeId,
+        oldStatus,
+        isActive,
+        performedBy || 'SYSTEM',
+        req
+      );
+
       return updatedUser;
     } catch (error) {
       console.error('Error toggling user status:', error);
@@ -210,7 +242,7 @@ export class UserManagementService {
   }
 
   // Update user role
-  async updateUserRole(employeeId: string, role: Role) {
+  async updateUserRole(employeeId: string, role: Role, performedBy?: string, req?: Request) {
     try {
       const user = await prisma.user.findUnique({
         where: { employeeId }
@@ -219,6 +251,9 @@ export class UserManagementService {
       if (!user) {
         throw new Error('User not found');
       }
+
+      // Store old role for audit log
+      const oldRole = user.role;
 
       const updatedUser = await prisma.user.update({
         where: { employeeId },
@@ -233,6 +268,18 @@ export class UserManagementService {
         }
       });
 
+      // Audit log
+      if (performedBy) {
+        await auditService.logLMSUserRoleChanged(
+          employeeId,
+          `${updatedUser.firstName} ${updatedUser.lastName}`,
+          oldRole,
+          role,
+          performedBy,
+          req
+        );
+      }
+
       return updatedUser;
     } catch (error) {
       console.error('Error updating user role:', error);
@@ -241,7 +288,7 @@ export class UserManagementService {
   }
 
   // Delete user and reset lmsUserCreated flag
-  async deleteUser(employeeId: string) {
+  async deleteUser(employeeId: string, performedBy?: string, req?: Request) {
     try {
       const user = await prisma.user.findUnique({
         where: { employeeId }
@@ -282,6 +329,16 @@ export class UserManagementService {
         throw new Error('Cannot delete user: This user has leave request records. Consider deactivating the user instead.');
       }
 
+      // Store user data for audit log
+      const userData = {
+        employeeId: user.employeeId,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isActive: user.isActive
+      };
+
       // Find the corresponding employee record by email
       const employee = await prisma.employee.findUnique({
         where: { email: user.email }
@@ -298,6 +355,16 @@ export class UserManagementService {
           where: { employeeId: employee.employeeId },
           data: { lmsUserCreated: false }
         });
+      }
+
+      // Audit log
+      if (performedBy) {
+        await auditService.logLMSUserDeleted(
+          employeeId,
+          userData,
+          performedBy,
+          req
+        );
       }
 
       return { message: 'User deleted successfully' };

@@ -29,7 +29,7 @@ router.post(
     const leaveRequest = await leaveService.createLeaveRequest({
       ...req.body,
       employeeId: req.user!.employeeId,
-    });
+    }, req);
 
     res.status(201).json({
       success: true,
@@ -207,7 +207,8 @@ router.post(
     const leaveRequest = await leaveService.cancelLeaveRequest(
       req.params.id,
       req.user!.employeeId,
-      req.body.reason
+      req.body.reason,
+      req
     );
 
     res.json({
@@ -228,10 +229,14 @@ router.post(
   authenticate,
   isManagerOrAbove,
   asyncHandler(async (req, res) => {
-    const result = await approvalService.approveLeave(req.params.id, {
-      approverEmployeeId: req.user!.employeeId,
-      comments: req.body.comments,
-    });
+    const result = await approvalService.approveLeave(
+      req.params.id,
+      {
+        approverEmployeeId: req.user!.employeeId,
+        comments: req.body.comments,
+      },
+      req
+    );
 
     res.json({
       success: true,
@@ -254,11 +259,15 @@ router.post(
     body('rejectionReason').notEmpty().withMessage('Rejection reason is required'),
   ]),
   asyncHandler(async (req, res) => {
-    const result = await approvalService.rejectLeave(req.params.id, {
-      approverEmployeeId: req.user!.employeeId,
-      comments: req.body.comments,
-      rejectionReason: req.body.rejectionReason,
-    });
+    const result = await approvalService.rejectLeave(
+      req.params.id,
+      {
+        approverEmployeeId: req.user!.employeeId,
+        comments: req.body.comments,
+        rejectionReason: req.body.rejectionReason,
+      },
+      req
+    );
 
     res.json({
       success: true,
@@ -298,7 +307,8 @@ router.put(
     const leaveRequest = await leaveService.updateLeaveRequest(
       req.params.id,
       req.user!.employeeId,
-      req.body
+      req.body,
+      req
     );
 
     res.json({

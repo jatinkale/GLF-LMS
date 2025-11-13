@@ -87,6 +87,7 @@ export default function ApprovalsPage() {
         return response.data.data;
       }
     },
+    placeholderData: (previousData) => previousData, // Keep previous data while fetching to maintain focus
   });
 
   // Filter approvals for managers (client-side search)

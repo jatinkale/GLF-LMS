@@ -50,7 +50,7 @@ router.post(
     body('password').notEmpty().withMessage('Password is required'),
   ]),
   asyncHandler(async (req, res) => {
-    const result = await authService.login(req.body);
+    const result = await authService.login(req.body, req);
     res.json({
       success: true,
       message: 'Login successful',
@@ -92,7 +92,8 @@ router.put(
     const result = await authService.changePassword(
       req.user!.id,
       req.body.currentPassword,
-      req.body.newPassword
+      req.body.newPassword,
+      req
     );
     res.json({
       success: true,

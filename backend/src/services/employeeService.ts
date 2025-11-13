@@ -1,6 +1,8 @@
 import { PrismaClient, LMSAccess, Role } from '@prisma/client';
+import { Request } from 'express';
 import xlsx from 'xlsx';
 import bcrypt from 'bcryptjs';
+import auditService from './auditService';
 
 const prisma = new PrismaClient();
 
@@ -77,7 +79,7 @@ export class EmployeeService {
   }
 
   // Create new employee
-  async createEmployee(data: EmployeeData) {
+  async createEmployee(data: EmployeeData, performedBy?: string, req?: Request) {
     try {
       // Check if employee ID already exists
       const existingEmployee = await prisma.employee.findUnique({
@@ -118,6 +120,16 @@ export class EmployeeService {
         }
       });
 
+      // Audit log
+      if (performedBy) {
+        await auditService.logEmployeeCreated(
+          employee.employeeId,
+          employee,
+          performedBy,
+          req
+        );
+      }
+
       return employee;
     } catch (error) {
       console.error('Error creating employee:', error);
@@ -126,7 +138,7 @@ export class EmployeeService {
   }
 
   // Update employee
-  async updateEmployee(employeeId: string, data: Partial<EmployeeData>) {
+  async updateEmployee(employeeId: string, data: Partial<EmployeeData>, performedBy?: string, req?: Request) {
     try {
       console.log('[UPDATE] Received data for employee update:', JSON.stringify(data, null, 2));
 
@@ -137,6 +149,9 @@ export class EmployeeService {
       if (!existingEmployee) {
         throw new Error('Employee not found');
       }
+
+      // Store old data for audit log
+      const oldData = { ...existingEmployee };
 
       // If email is being updated, check if new email already exists
       if (data.email && data.email !== existingEmployee.email) {
@@ -259,6 +274,17 @@ export class EmployeeService {
         // Don't throw error here, just log it - employee update should succeed
       }
 
+      // Audit log
+      if (performedBy) {
+        await auditService.logEmployeeUpdated(
+          employeeId,
+          oldData,
+          employee,
+          performedBy,
+          req
+        );
+      }
+
       return employee;
     } catch (error) {
       console.error('Error updating employee:', error);
@@ -267,7 +293,7 @@ export class EmployeeService {
   }
 
   // Delete employee
-  async deleteEmployee(id: string) {
+  async deleteEmployee(id: string, performedBy?: string, req?: Request) {
     try {
       const employee = await prisma.employee.findUnique({
         where: { id }
@@ -277,9 +303,22 @@ export class EmployeeService {
         throw new Error('Employee not found');
       }
 
+      // Store employee data for audit log
+      const employeeData = { ...employee };
+
       await prisma.employee.delete({
         where: { id }
       });
+
+      // Audit log
+      if (performedBy) {
+        await auditService.logEmployeeDeleted(
+          employeeData.employeeId,
+          employeeData,
+          performedBy,
+          req
+        );
+      }
 
       return { message: 'Employee deleted successfully' };
     } catch (error) {
@@ -467,7 +506,7 @@ export class EmployeeService {
   }
 
   // Import employees from Excel
-  async importEmployees(buffer: Buffer) {
+  async importEmployees(buffer: Buffer, performedBy?: string, req?: Request) {
     const validation = this.validateExcelFile(buffer);
 
     if (!validation.isValid) {
@@ -558,6 +597,15 @@ export class EmployeeService {
       }
     }
 
+    // Audit log for bulk import
+    if (performedBy && (importedCount > 0 || updatedCount > 0)) {
+      await auditService.logEmployeeBulkImported(
+        importedCount + updatedCount,
+        performedBy,
+        req
+      );
+    }
+
     return {
       success: errors.length === 0,
       errors,
@@ -582,7 +630,7 @@ export class EmployeeService {
   }
 
   // Create or update LMS users from employee records
-  async createLMSUsers(employeeIds: string[]) {
+  async createLMSUsers(employeeIds: string[], performedBy?: string, req?: Request) {
     const results = {
       success: true,
       created: 0,
@@ -629,7 +677,7 @@ export class EmployeeService {
 
         if (existingUser) {
           // Update existing user (including password reset to default and region)
-          await prisma.user.update({
+          const updatedUser = await prisma.user.update({
             where: { email: employee.email },
             data: {
               password: defaultPassword,
@@ -645,10 +693,21 @@ export class EmployeeService {
               region: region,
             }
           });
+
+          // Audit log for update
+          if (performedBy) {
+            await auditService.logLMSUserUpdated(
+              employee.employeeId,
+              updatedUser,
+              performedBy,
+              req
+            );
+          }
+
           results.updated++;
         } else {
           // Create new user
-          await prisma.user.create({
+          const newUser = await prisma.user.create({
             data: {
               email: employee.email,
               password: defaultPassword,
@@ -691,6 +750,16 @@ export class EmployeeService {
             })
           );
           await Promise.all(leaveBalancePromises);
+
+          // Audit log for creation
+          if (performedBy) {
+            await auditService.logLMSUserCreated(
+              newUser.employeeId,
+              newUser,
+              performedBy,
+              req
+            );
+          }
 
           results.created++;
         }

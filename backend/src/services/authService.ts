@@ -5,6 +5,8 @@ import { generateToken } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { Role } from '@prisma/client';
 import logger from '../utils/logger';
+import { Request } from 'express';
+import auditService from './auditService';
 
 interface RegisterData {
   email: string;
@@ -101,7 +103,7 @@ export class AuthService {
   }
 
   // Login user
-  async login(data: LoginData) {
+  async login(data: LoginData, req?: Request) {
     // Find user
     const user = await prisma.user.findUnique({
       where: { email: data.email },
@@ -155,6 +157,16 @@ export class AuthService {
     });
 
     logger.info('User logged in successfully', { employeeId: user.employeeId, email: user.email });
+
+    // Audit log
+    await auditService.logUserLogin(
+      user.employeeId,
+      {
+        email: user.email,
+        role: user.role,
+      },
+      req
+    );
 
     // Generate token
     const token = generateToken({
@@ -227,11 +239,11 @@ export class AuthService {
   }
 
   // Change password
-  async changePassword(employeeId: string, currentPassword: string, newPassword: string) {
+  async changePassword(employeeId: string, currentPassword: string, newPassword: string, req?: Request) {
     // Get user
     const user = await prisma.user.findUnique({
       where: { employeeId },
-      select: { employeeId: true, password: true }
+      select: { employeeId: true, password: true, email: true }
     });
 
     if (!user) {
@@ -258,6 +270,13 @@ export class AuthService {
     });
 
     logger.info('Password changed successfully', { employeeId });
+
+    // Audit log
+    await auditService.logPasswordChanged(
+      employeeId,
+      { email: user.email },
+      req
+    );
 
     return { message: 'Password changed successfully' };
   }

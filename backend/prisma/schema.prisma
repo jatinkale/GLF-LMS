@@ -523,15 +523,16 @@ model LeaveTemplate {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  action    String
-  entity    String
-  entityId  String
-  oldValues String?  @db.Text
-  newValues String?  @db.Text
-  ipAddress String?
-  userAgent String?  @db.Text
-  timestamp DateTime @default(now())
+  id          String   @id @default(uuid())
+  action      String
+  description String   @db.Text
+  entity      String
+  entityId    String
+  oldValues   String?  @db.Text
+  newValues   String?  @db.Text
+  ipAddress   String?
+  userAgent   String?  @db.Text
+  timestamp   DateTime @default(now())
 
   // Relations
   employeeId String?
@@ -542,6 +543,7 @@ model AuditLog {
 
   @@index([employeeId])
   @@index([entity, entityId])
+  @@index([action])
   @@index([timestamp])
   @@map("audit_logs")
 }

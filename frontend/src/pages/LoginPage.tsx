@@ -10,6 +10,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import glfLogo from '../assets/GLF_Logo_New.avif';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -43,9 +44,23 @@ export default function LoginPage() {
         }}
       >
         <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
-          <Typography variant="h4" component="h1" gutterBottom align="center">
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+            <Box
+              component="img"
+              src={glfLogo}
+              alt="Go Live Faster Logo"
+              sx={{
+                height: 80,
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
+          </Box>
+
+          <Typography variant="h5" align="center" sx={{ mb: 1, fontWeight: 600, color: 'text.primary' }}>
             Leave Management System
           </Typography>
+
           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
             Sign in to your account
           </Typography>
@@ -81,21 +96,6 @@ export default function LoginPage() {
               {loading ? <CircularProgress size={24} /> : 'Sign In'}
             </Button>
           </form>
-
-          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-            <Typography variant="caption" component="div" gutterBottom>
-              <strong>Demo Credentials:</strong>
-            </Typography>
-            <Typography variant="caption" component="div">
-              Admin: jatin@golivefaster.com / Admin@123
-            </Typography>
-            <Typography variant="caption" component="div">
-              Manager: manager@lms.com / Password@123
-            </Typography>
-            <Typography variant="caption" component="div">
-              Employee: employee@lms.com / Password@123
-            </Typography>
-          </Box>
         </Paper>
       </Box>
     </Container>

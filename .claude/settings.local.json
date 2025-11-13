@@ -26,7 +26,14 @@
       "Bash(npm install:*)",
       "Bash(JSX_FINDINGS.txt)",
       "Bash(cat:*)",
-      "Bash(timeout /t 5)"
+      "Bash(timeout /t 5)",
+      "Bash(if not exist \"src\\assets\" mkdir \"src\\assets\")",
+      "Bash(dir:*)",
+      "Bash(Remove-Item:*)",
+      "Bash(PORT=5174 npm run dev:*)",
+      "Bash(ForEach-Object { $_ -split '\\s+')",
+      "Bash(Select-Object -Last 1 })",
+      "Bash(ForEach-Object { taskkill /F /PID $_ })"
     ],
     "deny": [],
     "ask": []

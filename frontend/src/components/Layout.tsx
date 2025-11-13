@@ -25,12 +25,13 @@ import {
   Person,
   Logout,
   People,
-  Policy,
   CalendarMonth,
+  Assessment,
+  Settings,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import Logo from './Logo';
 import { gradients } from '../theme/theme';
+import glfLogo from '../assets/GLF_Logo_New.avif';
 
 const drawerWidth = 240;
 
@@ -46,9 +47,10 @@ const navItems: NavItem[] = [
   { text: 'My Leaves', icon: <EventNote />, path: '/leaves', roles: ['EMPLOYEE', 'MANAGER', 'HR'] },
   { text: 'Approvals', icon: <CheckCircle />, path: '/approvals', roles: ['MANAGER', 'HR', 'ADMIN'] },
   { text: 'Employee Management', icon: <People />, path: '/employees', roles: ['ADMIN'] },
-  { text: 'Leave Policy', icon: <Policy />, path: '/leave-policy', roles: ['ADMIN'] },
-  { text: 'Holiday Calendar', icon: <CalendarMonth />, path: '/holiday-calendar', roles: ['ADMIN'] },
+  { text: 'Holiday Calendar', icon: <CalendarMonth />, path: '/holiday-calendar', roles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
+  { text: 'Leave Policy', icon: <Settings />, path: '/leave-policy', roles: ['ADMIN'] },
   { text: 'Profile', icon: <Person />, path: '/profile', roles: ['EMPLOYEE', 'MANAGER', 'HR'] },
+  { text: 'Audit Logs', icon: <Assessment />, path: '/audit-logs', roles: ['ADMIN'] },
 ];
 
 export default function Layout() {
@@ -86,7 +88,7 @@ export default function Layout() {
     <div>
       <Box
         sx={{
-          background: gradients.primary,
+          backgroundColor: '#fff',
           p: 3,
           display: 'flex',
           alignItems: 'center',
@@ -94,7 +96,16 @@ export default function Layout() {
           minHeight: 100,
         }}
       >
-        <Logo variant="full" size="small" color="white" />
+        <Box
+          component="img"
+          src={glfLogo}
+          alt="Go Live Faster Logo"
+          sx={{
+            height: 60,
+            width: 'auto',
+            objectFit: 'contain',
+          }}
+        />
       </Box>
       <Divider />
       <List sx={{ px: 1.5, pt: 2 }}>

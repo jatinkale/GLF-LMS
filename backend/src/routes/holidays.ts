@@ -53,12 +53,16 @@ router.post('/', authorize('ADMIN'), async (req, res, next) => {
       throw new AppError('All fields are required', 400);
     }
 
-    const holiday = await holidayService.createHoliday({
-      year: parseInt(year),
-      date: new Date(date),
-      description,
-      location,
-    });
+    const holiday = await holidayService.createHoliday(
+      {
+        year: parseInt(year),
+        date: new Date(date),
+        description,
+        location,
+      },
+      req.user!.employeeId,
+      req
+    );
 
     res.status(201).json({
       success: true,
@@ -74,7 +78,7 @@ router.post('/', authorize('ADMIN'), async (req, res, next) => {
 router.delete('/:id', authorize('ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await holidayService.deleteHoliday(id);
+    const result = await holidayService.deleteHoliday(id, req.user!.employeeId, req);
 
     res.json({
       success: true,

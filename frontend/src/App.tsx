@@ -14,8 +14,9 @@ import LeavesPage from './pages/LeavesPage';
 import ApprovalsPage from './pages/ApprovalsPage';
 import ProfilePage from './pages/ProfilePage';
 import EmployeeDetailsPage from './pages/EmployeeDetailsPage';
-import LeavePolicyPage from './pages/LeavePolicyPage';
 import HolidayCalendarPage from './pages/HolidayCalendarPage';
+import AuditLogsPage from './pages/AuditLogsPage';
+import LeavePolicyPage from './pages/LeavePolicyPage';
 
 // Layout
 import Layout from './components/Layout';
@@ -117,19 +118,20 @@ function AppRoutes() {
             </AdminRoute>
           }
         />
+        <Route path="holiday-calendar" element={<HolidayCalendarPage />} />
+        <Route
+          path="audit-logs"
+          element={
+            <AdminRoute>
+              <AuditLogsPage />
+            </AdminRoute>
+          }
+        />
         <Route
           path="leave-policy"
           element={
             <AdminRoute>
               <LeavePolicyPage />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="holiday-calendar"
-          element={
-            <AdminRoute>
-              <HolidayCalendarPage />
             </AdminRoute>
           }
         />

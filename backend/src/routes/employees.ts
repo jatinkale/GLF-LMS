@@ -125,6 +125,7 @@ router.post('/', async (req: Request, res: Response) => {
       gender: gender?.trim(),
       email: email.trim().toLowerCase(),
       phoneNumber: phoneNumber?.trim(),
+      dateOfJoining: new Date(),
       location: location?.trim(),
       designation: designation?.trim(),
       department: department?.trim(),
@@ -132,7 +133,7 @@ router.post('/', async (req: Request, res: Response) => {
       reportingManagerId: reportingManagerId.trim(),
       lmsAccess: lmsAccess as LMSAccess,
       isActive: isActive !== undefined ? isActive : true
-    });
+    }, req.user!.employeeId, req);
 
     res.status(201).json({
       success: true,
@@ -217,7 +218,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       ...(reportingManagerId && { reportingManagerId: reportingManagerId.trim() }),
       ...(lmsAccess && { lmsAccess: lmsAccess as LMSAccess }),
       ...(isActive !== undefined && { isActive })
-    });
+    }, req.user!.employeeId, req);
 
     res.json({
       success: true,
@@ -250,7 +251,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await employeeService.deleteEmployee(id);
+    const result = await employeeService.deleteEmployee(id, req.user!.employeeId, req);
 
     res.json({
       success: true,
@@ -283,7 +284,7 @@ router.post('/import/excel', upload.single('file'), async (req: Request, res: Re
       });
     }
 
-    const result = await employeeService.importEmployees(req.file.buffer);
+    const result = await employeeService.importEmployees(req.file.buffer, req.user!.employeeId, req);
 
     if (result.success) {
       res.json({
@@ -322,7 +323,7 @@ router.post('/create-lms-users', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await employeeService.createLMSUsers(employeeIds);
+    const result = await employeeService.createLMSUsers(employeeIds, req.user!.employeeId, req);
 
     if (result.success) {
       res.json({

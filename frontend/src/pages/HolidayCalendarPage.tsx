@@ -24,6 +24,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Holiday {
   id: string;
@@ -45,6 +46,8 @@ interface NewHoliday {
 export default function HolidayCalendarPage() {
   const currentYear = new Date().getFullYear();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
   const [isAdding, setIsAdding] = useState(false);
   const [newHoliday, setNewHoliday] = useState<NewHoliday>({
@@ -61,16 +64,21 @@ export default function HolidayCalendarPage() {
 
   // Fetch holidays
   const { data: holidays, isLoading } = useQuery({
-    queryKey: ['holidays', filters],
+    queryKey: ['holidays', filters.year, isAdmin ? filters.location : 'All'],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.year && filters.year !== 'All') params.append('year', filters.year);
-      if (filters.location && filters.location !== 'All') params.append('location', filters.location);
+      // For admins, apply location filter; for non-admins, fetch all and filter client-side
+      if (isAdmin && filters.location && filters.location !== 'All') params.append('location', filters.location);
 
       const response = await api.get(`/holidays?${params.toString()}`);
       return response.data.data as Holiday[];
     },
   });
+
+  // For non-admin users, split holidays by location
+  const indiaHolidays = !isAdmin ? (holidays || []).filter(h => h.location === 'IND') : [];
+  const usHolidays = !isAdmin ? (holidays || []).filter(h => h.location === 'US') : [];
 
   // Create holiday mutation
   const createMutation = useMutation({
@@ -150,8 +158,8 @@ export default function HolidayCalendarPage() {
             </Box>
           </Box>
 
-          {/* Add Holiday Button */}
-          {!isAdding && (
+          {/* Add Holiday Button - Admin Only */}
+          {isAdmin && !isAdding && (
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -220,57 +228,60 @@ export default function HolidayCalendarPage() {
               </ToggleButtonGroup>
             </Box>
 
-            {/* Location Filter */}
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>
-                Location
-              </Typography>
-              <ToggleButtonGroup
-                value={filters.location}
-                exclusive
-                onChange={(e, newValue) => {
-                  if (newValue !== null) {
-                    setFilters({ ...filters, location: newValue });
-                  }
-                }}
-                size="small"
-                sx={{
-                  '& .MuiToggleButton-root': {
-                    px: 2,
-                    py: 0.5,
-                    '&.Mui-selected': {
-                      backgroundColor: '#677eea',
-                      color: '#fff',
-                      '&:hover': {
-                        backgroundColor: '#5568d3',
+            {/* Location Filter - Admin Only */}
+            {isAdmin && (
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>
+                  Location
+                </Typography>
+                <ToggleButtonGroup
+                  value={filters.location}
+                  exclusive
+                  onChange={(e, newValue) => {
+                    if (newValue !== null) {
+                      setFilters({ ...filters, location: newValue });
+                    }
+                  }}
+                  size="small"
+                  sx={{
+                    '& .MuiToggleButton-root': {
+                      px: 2,
+                      py: 0.5,
+                      '&.Mui-selected': {
+                        backgroundColor: '#677eea',
+                        color: '#fff',
+                        '&:hover': {
+                          backgroundColor: '#5568d3',
+                        },
                       },
                     },
-                  },
-                }}
-              >
-                <ToggleButton value="All">All</ToggleButton>
-                <ToggleButton value="IND">India</ToggleButton>
-                <ToggleButton value="US">United States</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
+                  }}
+                >
+                  <ToggleButton value="All">All</ToggleButton>
+                  <ToggleButton value="IND">India</ToggleButton>
+                  <ToggleButton value="US">United States</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            )}
           </Box>
         </Paper>
 
-        {/* Holidays Table */}
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: 'grey.100' }}>
-                <TableCell sx={{ fontWeight: 700 }}>Year</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Holiday Description</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>
-                  Actions
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+        {/* Admin View - Single Table with All Holidays */}
+        {isAdmin ? (
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                  <TableCell sx={{ fontWeight: 700 }}>Year</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Holiday Description</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 700 }}>
+                    Actions
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
               {/* New Holiday Row (when adding) */}
               {isAdding && (
                 <TableRow>
@@ -429,6 +440,104 @@ export default function HolidayCalendarPage() {
             </TableBody>
           </Table>
         </TableContainer>
+        ) : (
+          /* Non-Admin View - Split by Location */
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* India Holidays Table */}
+            <Box>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
+                India Holidays
+              </Typography>
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                      <TableCell sx={{ fontWeight: 700 }}>Year</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Holiday Description</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={3} align="center">
+                          Loading holidays...
+                        </TableCell>
+                      </TableRow>
+                    ) : indiaHolidays.length > 0 ? (
+                      indiaHolidays.map((holiday) => (
+                        <TableRow key={holiday.id} hover>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {holiday.year}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{dayjs(holiday.date).format('DD-MMM-YYYY')}</TableCell>
+                          <TableCell>{holiday.description}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3} align="center">
+                          <Typography color="text.secondary">
+                            No holidays found for India
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+
+            {/* US Holidays Table */}
+            <Box>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
+                United States Holidays
+              </Typography>
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                      <TableCell sx={{ fontWeight: 700 }}>Year</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Holiday Description</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={3} align="center">
+                          Loading holidays...
+                        </TableCell>
+                      </TableRow>
+                    ) : usHolidays.length > 0 ? (
+                      usHolidays.map((holiday) => (
+                        <TableRow key={holiday.id} hover>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {holiday.year}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{dayjs(holiday.date).format('DD-MMM-YYYY')}</TableCell>
+                          <TableCell>{holiday.description}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3} align="center">
+                          <Typography color="text.secondary">
+                            No holidays found for United States
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          </Box>
+        )}
       </Box>
     </LocalizationProvider>
   );

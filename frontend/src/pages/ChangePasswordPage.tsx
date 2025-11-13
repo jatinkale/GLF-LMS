@@ -11,11 +11,12 @@ import {
   IconButton,
   Alert,
 } from '@mui/material';
-import { Visibility, VisibilityOff, Lock } from '@mui/icons-material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
+import glfLogo from '../assets/GLF_Logo_New.avif';
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
@@ -115,12 +116,26 @@ export default function ChangePasswordPage() {
     >
       <Card sx={{ maxWidth: 500, width: '100%' }}>
         <CardContent sx={{ p: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, justifyContent: 'center' }}>
-            <Lock sx={{ fontSize: 40, color: 'primary.main', mr: 1 }} />
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>
-              Change Password
-            </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+            <Box
+              component="img"
+              src={glfLogo}
+              alt="Go Live Faster Logo"
+              sx={{
+                height: 80,
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
           </Box>
+
+          <Typography variant="h5" align="center" sx={{ mb: 1, fontWeight: 600, color: 'text.primary' }}>
+            Leave Management System
+          </Typography>
+
+          <Typography variant="h6" align="center" sx={{ mb: 2, fontWeight: 500, color: 'text.secondary' }}>
+            Change Password
+          </Typography>
 
           <Alert severity="warning" sx={{ mb: 3 }}>
             You are required to change your password before continuing. Please choose a new password.

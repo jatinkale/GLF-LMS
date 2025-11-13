@@ -206,6 +206,7 @@ router.post('/leave-policy/process', async (req: Request, res: Response) => {
       plannedTimeOff: plannedTimeOff !== undefined ? parseFloat(plannedTimeOff) : undefined,
       bereavementLeave: bereavementLeave !== undefined ? parseFloat(bereavementLeave) : undefined,
       processedBy: userEmail,
+      req: req,
     });
 
     res.json({
@@ -897,9 +898,9 @@ router.get('/all-leaves', async (req: Request, res: Response) => {
       where.user = {
         ...where.user,
         OR: [
-          { employeeId: { contains: searchTerm, mode: 'insensitive' } },
-          { firstName: { contains: searchTerm, mode: 'insensitive' } },
-          { lastName: { contains: searchTerm, mode: 'insensitive' } },
+          { employeeId: { contains: searchTerm } },
+          { firstName: { contains: searchTerm } },
+          { lastName: { contains: searchTerm } },
         ],
       };
     }
@@ -958,6 +959,169 @@ router.get('/all-leaves', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch leaves',
+    });
+  }
+});
+
+// Get audit logs with filters
+router.get('/audit-logs', async (req: Request, res: Response) => {
+  try {
+    const { userId, userName, eventType, fromDate, toDate, page = '1', limit = '50' } = req.query;
+
+    // Build where clause
+    const where: any = {};
+
+    // User ID filter
+    if (userId && typeof userId === 'string' && userId.trim()) {
+      where.employeeId = { contains: userId.trim() };
+    }
+
+    // User Name filter (search in user's firstName or lastName through relation)
+    if (userName && typeof userName === 'string' && userName.trim()) {
+      where.user = {
+        OR: [
+          { firstName: { contains: userName.trim() } },
+          { lastName: { contains: userName.trim() } },
+        ],
+      };
+    }
+
+    // Event Type filter
+    if (eventType && typeof eventType === 'string' && eventType.trim()) {
+      where.action = eventType.trim();
+    }
+
+    // Date range filter
+    if (fromDate || toDate) {
+      where.timestamp = {};
+      if (fromDate) {
+        where.timestamp.gte = new Date(fromDate as string);
+      }
+      if (toDate) {
+        // Add 1 day to include the entire end date
+        const endDate = new Date(toDate as string);
+        endDate.setHours(23, 59, 59, 999);
+        where.timestamp.lte = endDate;
+      }
+    }
+
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+
+    const [total, auditLogs] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              employeeId: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+      }),
+    ]);
+
+    res.json({
+      success: true,
+      data: auditLogs,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (error: any) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch audit logs',
+    });
+  }
+});
+
+// Get audit logs for export (with limit)
+router.get('/audit-logs/export', async (req: Request, res: Response) => {
+  try {
+    const { userId, userName, eventType, fromDate, toDate } = req.query;
+
+    // Build where clause
+    const where: any = {};
+
+    // User ID filter
+    if (userId && typeof userId === 'string' && userId.trim()) {
+      where.employeeId = { contains: userId.trim() };
+    }
+
+    // User Name filter
+    if (userName && typeof userName === 'string' && userName.trim()) {
+      where.user = {
+        OR: [
+          { firstName: { contains: userName.trim() } },
+          { lastName: { contains: userName.trim() } },
+        ],
+      };
+    }
+
+    // Event Type filter
+    if (eventType && typeof eventType === 'string' && eventType.trim()) {
+      where.action = eventType.trim();
+    }
+
+    // Date range filter
+    if (fromDate || toDate) {
+      where.timestamp = {};
+      if (fromDate) {
+        where.timestamp.gte = new Date(fromDate as string);
+      }
+      if (toDate) {
+        const endDate = new Date(toDate as string);
+        endDate.setHours(23, 59, 59, 999);
+        where.timestamp.lte = endDate;
+      }
+    }
+
+    // Limit to 1500 rows if no filters applied
+    const hasFilters = userId || userName || eventType || fromDate || toDate;
+    const limit = hasFilters ? undefined : 1500;
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+      take: limit,
+    });
+
+    res.json({
+      success: true,
+      data: auditLogs,
+      totalRecords: auditLogs.length,
+    });
+  } catch (error: any) {
+    console.error('Error exporting audit logs:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to export audit logs',
     });
   }
 });

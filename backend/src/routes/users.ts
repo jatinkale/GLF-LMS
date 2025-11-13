@@ -53,7 +53,7 @@ router.post('/create-for-employee', async (req: Request, res: Response) => {
       });
     }
 
-    const user = await userManagementService.createUserForEmployee(employeeId, role);
+    const user = await userManagementService.createUserForEmployee(employeeId, role, req.user!.employeeId, req);
 
     res.status(201).json({
       success: true,
@@ -83,7 +83,7 @@ router.post('/create-for-employee', async (req: Request, res: Response) => {
 router.post('/:userId/reset-password', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    await userManagementService.resetPassword(userId);
+    await userManagementService.resetPassword(userId, req.user!.employeeId, req);
 
     res.json({
       success: true,
@@ -119,7 +119,7 @@ router.patch('/:userId/toggle-status', async (req: Request, res: Response) => {
       });
     }
 
-    const user = await userManagementService.toggleUserStatus(userId, isActive);
+    const user = await userManagementService.toggleUserStatus(userId, isActive, req.user!.employeeId, req);
 
     res.json({
       success: true,
@@ -156,7 +156,7 @@ router.patch('/:userId/role', async (req: Request, res: Response) => {
       });
     }
 
-    const user = await userManagementService.updateUserRole(userId, role);
+    const user = await userManagementService.updateUserRole(userId, role, req.user!.employeeId, req);
 
     res.json({
       success: true,
@@ -184,7 +184,7 @@ router.patch('/:userId/role', async (req: Request, res: Response) => {
 router.delete('/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const result = await userManagementService.deleteUser(userId);
+    const result = await userManagementService.deleteUser(userId, req.user!.employeeId, req);
 
     res.json({
       success: true,

@@ -1,4 +1,6 @@
 import { PrismaClient, Region, EmployeeType } from '@prisma/client';
+import { Request } from 'express';
+import auditService from './auditService';
 
 const prisma = new PrismaClient();
 
@@ -12,12 +14,13 @@ interface ProcessLeavesInput {
   plannedTimeOff?: number;
   bereavementLeave?: number;
   processedBy: string;
+  req?: Request;
 }
 
 export class LeavePolicyService {
   // Process leaves for a specific region, employment type, and month-year
   async processLeaves(data: ProcessLeavesInput) {
-    const { region, employmentType, month, year, casualLeave, privilegeLeave, plannedTimeOff, bereavementLeave, processedBy } = data;
+    const { region, employmentType, month, year, casualLeave, privilegeLeave, plannedTimeOff, bereavementLeave, processedBy, req } = data;
 
     try {
       // Check if already processed for this month-year
@@ -271,6 +274,26 @@ export class LeavePolicyService {
             processedBy,
           },
         });
+      }
+
+      // Audit log for bulk processing
+      if (processedBy) {
+        const processedLeaveTypes = [];
+        if (casualLeave && casualLeave > 0) processedLeaveTypes.push(`CL: ${casualLeave} days`);
+        if (privilegeLeave && privilegeLeave > 0) processedLeaveTypes.push(`PL: ${privilegeLeave} days`);
+        if (plannedTimeOff && plannedTimeOff > 0) processedLeaveTypes.push(`PTO: ${plannedTimeOff} days`);
+        if (bereavementLeave && bereavementLeave > 0) processedLeaveTypes.push(`BL: ${bereavementLeave} days`);
+
+        await auditService.logLeaveBalanceBulkProcessed(
+          region,
+          employmentType,
+          month,
+          year,
+          employees.length,
+          processedLeaveTypes.join(', '),
+          processedBy,
+          req
+        );
       }
 
       return {

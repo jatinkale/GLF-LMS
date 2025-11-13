@@ -4,6 +4,8 @@ import { LeaveStatus, ApprovalStatus } from '@prisma/client';
 import { calculateDays, formatReadableDate } from '../utils/dateHelper';
 import emailService from './emailService';
 import logger from '../utils/logger';
+import { Request } from 'express';
+import auditService from './auditService';
 
 interface CreateLeaveRequestData {
   employeeId: string;
@@ -33,7 +35,7 @@ interface UpdateLeaveRequestData {
 
 export class LeaveService {
   // Create leave request
-  async createLeaveRequest(data: CreateLeaveRequestData) {
+  async createLeaveRequest(data: CreateLeaveRequestData, req?: Request) {
     const { employeeId, leaveTypeCode, startDate, endDate, isHalfDay, reason, isDraft } = data;
 
     // Get user and leave type
@@ -200,6 +202,20 @@ export class LeaveService {
         );
       }
 
+      // Audit log
+      await auditService.logLeaveApplied(
+        leaveRequest.id,
+        {
+          employeeId,
+          leaveTypeCode,
+          totalDays,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+        },
+        employeeId,
+        req
+      );
+
       logger.info('Leave request created', {
         leaveRequestId: leaveRequest.id,
         employeeId,
@@ -353,7 +369,7 @@ export class LeaveService {
   }
 
   // Update leave request (only drafts)
-  async updateLeaveRequest(id: string, employeeId: string, data: UpdateLeaveRequestData) {
+  async updateLeaveRequest(id: string, employeeId: string, data: UpdateLeaveRequestData, req?: Request) {
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
       include: { leaveType: true },
@@ -370,6 +386,15 @@ export class LeaveService {
     if (!leaveRequest.isDraft) {
       throw new AppError('Cannot update submitted leave request', 400);
     }
+
+    // Capture old data for audit
+    const oldData = {
+      leaveTypeCode: leaveRequest.leaveTypeCode,
+      startDate: leaveRequest.startDate,
+      endDate: leaveRequest.endDate,
+      totalDays: leaveRequest.totalDays,
+      reason: leaveRequest.reason,
+    };
 
     // Calculate new total days if dates changed
     let totalDays = leaveRequest.totalDays;
@@ -398,6 +423,21 @@ export class LeaveService {
         },
       },
     });
+
+    // Audit log
+    await auditService.logLeaveUpdated(
+      id,
+      oldData,
+      {
+        leaveTypeCode: updated.leaveTypeCode,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+        totalDays: updated.totalDays,
+        reason: updated.reason,
+      },
+      employeeId,
+      req
+    );
 
     return updated;
   }
@@ -494,7 +534,7 @@ export class LeaveService {
   }
 
   // Cancel leave request
-  async cancelLeaveRequest(id: string, employeeId: string, reason: string) {
+  async cancelLeaveRequest(id: string, employeeId: string, reason: string, req?: Request) {
     const leaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
       include: {
@@ -582,6 +622,21 @@ export class LeaveService {
         leaveRequest.leaveType.name
       );
     }
+
+    // Audit log
+    await auditService.logLeaveCancelled(
+      id,
+      {
+        employeeId: leaveRequest.employeeId,
+        leaveTypeCode: leaveRequest.leaveTypeCode,
+        totalDays: leaveRequest.totalDays,
+        startDate: leaveRequest.startDate,
+        endDate: leaveRequest.endDate,
+      },
+      employeeId,
+      reason,
+      req
+    );
 
     logger.info('Leave request cancelled', { leaveRequestId: id, employeeId });
 

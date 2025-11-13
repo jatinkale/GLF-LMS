@@ -1,6 +1,8 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import { Request } from 'express';
+import auditService from './auditService';
 
 export class LeaveBalanceService {
   // Get leave balances for a user
@@ -87,7 +89,9 @@ export class LeaveBalanceService {
     employeeId: string,
     leaveTypeCode: string,
     year: number,
-    allocated: number
+    allocated: number,
+    performedBy?: string,
+    req?: Request
   ) {
     // First, check if balance exists to calculate correct available
     const existingBalance = await prisma.leaveBalance.findUnique({
@@ -99,6 +103,8 @@ export class LeaveBalanceService {
         },
       },
     });
+
+    const isUpdate = !!existingBalance;
 
     // Calculate the correct available balance
     // available = allocated + carriedForward - used - pending
@@ -131,6 +137,45 @@ export class LeaveBalanceService {
     });
 
     logger.info('Leave balance upserted', { employeeId, leaveTypeCode, year, allocated });
+
+    // Audit log
+    if (performedBy) {
+      // Get employee and leave type details for description
+      const user = await prisma.user.findUnique({
+        where: { employeeId },
+        select: { firstName: true, lastName: true }
+      });
+
+      const leaveType = await prisma.leaveType.findUnique({
+        where: { leaveTypeCode },
+        select: { name: true }
+      });
+
+      if (isUpdate) {
+        await auditService.logLeaveBalanceAdjusted(
+          employeeId,
+          `${user?.firstName} ${user?.lastName}`,
+          leaveTypeCode,
+          leaveType?.name || leaveTypeCode,
+          existingBalance!.allocated,
+          allocated,
+          year,
+          performedBy,
+          req
+        );
+      } else {
+        await auditService.logLeaveBalanceAllocated(
+          employeeId,
+          `${user?.firstName} ${user?.lastName}`,
+          leaveTypeCode,
+          leaveType?.name || leaveTypeCode,
+          allocated,
+          year,
+          performedBy,
+          req
+        );
+      }
+    }
 
     return balance;
   }

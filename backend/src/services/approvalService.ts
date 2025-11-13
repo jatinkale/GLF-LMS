@@ -4,6 +4,8 @@ import { ApprovalStatus } from '@prisma/client';
 import emailService from './emailService';
 import { formatReadableDate } from '../utils/dateHelper';
 import logger from '../utils/logger';
+import { Request } from 'express';
+import auditService from './auditService';
 
 interface ApproveRejectData {
   approverEmployeeId: string;
@@ -122,7 +124,7 @@ export class ApprovalService {
   }
 
   // Approve leave request
-  async approveLeave(leaveRequestId: string, data: ApproveRejectData) {
+  async approveLeave(leaveRequestId: string, data: ApproveRejectData, req?: Request) {
     const { approverEmployeeId, comments } = data;
 
     // Get approver's role
@@ -215,6 +217,23 @@ export class ApprovalService {
       },
     });
 
+    // If Admin is approving, bypass all other pending approvals (admin override)
+    if (isAdmin) {
+      await prisma.approval.updateMany({
+        where: {
+          leaveRequestId,
+          status: 'PENDING',
+          isActive: true,
+          NOT: {
+            id: approval.id, // Don't update the admin's own approval
+          },
+        },
+        data: {
+          isActive: false, // Mark as inactive (bypassed by admin)
+        },
+      });
+    }
+
     // Check if this is the final approval (all approvals at this level are approved)
     const pendingApprovals = await prisma.approval.findMany({
       where: {
@@ -262,6 +281,19 @@ export class ApprovalService {
         `${approval.approver.firstName} ${approval.approver.lastName}`
       );
 
+      // Audit log
+      await auditService.logLeaveApproved(
+        leaveRequestId,
+        {
+          employeeId: leaveRequest.employeeId,
+          leaveTypeCode: leaveRequest.leaveTypeCode,
+          totalDays: leaveRequest.totalDays,
+        },
+        approverEmployeeId,
+        comments,
+        req
+      );
+
       logger.info('Leave request approved', {
         leaveRequestId,
         approverEmployeeId,
@@ -275,7 +307,7 @@ export class ApprovalService {
   }
 
   // Reject leave request
-  async rejectLeave(leaveRequestId: string, data: ApproveRejectData & { rejectionReason: string }) {
+  async rejectLeave(leaveRequestId: string, data: ApproveRejectData & { rejectionReason: string }, req?: Request) {
     const { approverEmployeeId, comments, rejectionReason } = data;
 
     if (!rejectionReason) {
@@ -372,6 +404,23 @@ export class ApprovalService {
       },
     });
 
+    // If Admin is rejecting, bypass all other pending approvals (admin override)
+    if (isAdmin) {
+      await prisma.approval.updateMany({
+        where: {
+          leaveRequestId,
+          status: 'PENDING',
+          isActive: true,
+          NOT: {
+            id: approval.id, // Don't update the admin's own approval
+          },
+        },
+        data: {
+          isActive: false, // Mark as inactive (bypassed by admin)
+        },
+      });
+    }
+
     // Reject leave request
     await prisma.leaveRequest.update({
       where: { id: leaveRequestId },
@@ -409,6 +458,19 @@ export class ApprovalService {
       leaveRequest.leaveType.name,
       `${approval.approver.firstName} ${approval.approver.lastName}`,
       rejectionReason
+    );
+
+    // Audit log
+    await auditService.logLeaveRejected(
+      leaveRequestId,
+      {
+        employeeId: leaveRequest.employeeId,
+        leaveTypeCode: leaveRequest.leaveTypeCode,
+        totalDays: leaveRequest.totalDays,
+      },
+      approverEmployeeId,
+      rejectionReason,
+      req
     );
 
     logger.info('Leave request rejected', {
