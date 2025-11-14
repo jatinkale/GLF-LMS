@@ -26,7 +26,158 @@ LMS v2 is a comprehensive Leave Management System built with modern web technolo
 
 ## Recent Major Changes
 
-### Employee Date Fields & Gender-Based Leave Filtering (Latest Update)
+### Rejection Information Feature & Environment Cleanup Script (Latest Update)
+
+**Date:** November 13, 2025
+
+#### Summary
+Added comprehensive rejection information display for all rejected leave requests across Admin, Employee, and Manager views. Created CleanEnvironment.sql script for database cleanup while preserving configuration data.
+
+**Key Changes:**
+
+1. **Rejection Information Display:**
+   - Info icon (ℹ️) displayed in Actions column for all rejected leaves
+   - Clickable icon opens detailed rejection modal showing:
+     - Leave type and period details
+     - Who rejected the leave (approver name)
+     - Rejection date and time
+     - Rejection reason (highlighted in pink paper)
+   - Implemented across all leave-related screens:
+     - ApprovalsPage (Admin view)
+     - LeavesPage (Employee "My Leaves" view)
+     - DashboardPage (Employee Recent Leaves section)
+   - Consistent UX with pink color theme (#f857a6) matching rejection status
+
+2. **CleanEnvironment.sql Script:**
+   - Comprehensive SQL script to clean database environment
+   - Deletes all transactional data while preserving:
+     - Admin login credentials
+     - Department master data
+     - LeaveType configurations
+     - All table structures and relationships
+     - All business logic and enums
+   - Flexible options for audit logs and holiday records
+   - Auto-resets ID counters and verifies admin status
+   - Safe execution with foreign key handling
+
+#### Frontend Changes
+
+**Files Modified:**
+
+1. **`frontend/src/pages/ApprovalsPage.tsx`**:
+   - Added `Info` icon import
+   - Added rejection info dialog state management (lines 47-48)
+   - Updated Actions column to display centered status with Info icon (lines 786-810)
+   - Created Rejection Details modal (lines 908-971) with:
+     - Employee information display
+     - Leave type and period
+     - Rejected by approver name
+     - Rejection date/time
+     - Rejection reason in highlighted pink paper component
+
+2. **`frontend/src/pages/LeavesPage.tsx`**:
+   - Added `Info` and `Paper` imports
+   - Added rejection info dialog state (lines 57-58)
+   - Modified Actions column logic (lines 651-696):
+     ```typescript
+     {canCancelLeave(leave) ? (
+       <Button>Cancel</Button>
+     ) : leave.status === 'REJECTED' ? (
+       <Info icon with onClick handler />
+     ) : (
+       <Typography>-</Typography>
+     )}
+     ```
+   - Added Rejection Info modal (lines 856-912)
+   - Info icon shown only when cancel button not available and status is REJECTED
+
+3. **`frontend/src/pages/DashboardPage.tsx`**:
+   - Added `Info` icon import (line 53)
+   - Added rejection dialog state variables (lines 121-122)
+   - Updated Employee Recent Leaves status display (lines 1145-1198)
+   - Added Rejection Details modal (lines 1472-1528)
+   - Same conditional logic as LeavesPage for Actions column
+
+#### UI/UX Design
+
+**Rejection Info Icon:**
+- **Size**: 20px (fontSize: 20)
+- **Color**: Pink #f857a6 (matching rejection status)
+- **Hover**: Darker pink #c62828
+- **Position**: Actions column (center-aligned)
+- **Visibility**: Only shown for leaves with status = 'REJECTED'
+
+**Rejection Details Modal:**
+- **Width**: 600px (maxWidth: "sm", fullWidth)
+- **Title**: "Rejection Details"
+- **Layout**: Vertical stack with labeled sections
+- **Rejection Reason**: Highlighted in pink paper (#fef0f0 background, #f857a6 border)
+- **Data Sources**: Falls back between LeaveRequest and Approval entities
+
+#### Data Access Pattern
+
+Rejection information accessed from multiple sources with fallback logic:
+```typescript
+// Rejection reason
+leave.rejectionReason ||
+leave.approvals.find(a => a.status === 'REJECTED')?.comments ||
+'No reason provided'
+
+// Rejected by
+leave.approvals.find(a => a.status === 'REJECTED')
+  ?.approver?.firstName + ' ' + lastName || 'N/A'
+
+// Rejection date
+leave.rejectedDate ||
+leave.approvals.find(a => a.status === 'REJECTED')?.rejectedDate ||
+'N/A'
+```
+
+#### Backend Changes
+
+**New File Created:**
+
+1. **`backend/CleanEnvironment.sql`**:
+   - Comprehensive environment cleanup script
+   - 200+ lines with detailed comments
+   - Sections:
+     - Foreign key safety (disable/enable)
+     - Dependent tables cleanup (notifications, delegations, approvals, etc.)
+     - Audit and history cleanup (configurable options)
+     - Holiday records deletion
+     - Employee and user data cleanup (except Admin)
+     - Reference data preservation
+     - Admin status reset
+     - Verification queries
+
+**Script Features:**
+- **Deletes**: All transactional data (leaves, balances, requests, notifications, etc.)
+- **Keeps**: Admin user, Departments, LeaveTypes, table structures, enums, business logic
+- **Options**:
+  - Audit logs: Delete all / Keep Admin's / Keep all (3 choices)
+  - Holiday records: Deleted by default, easy to preserve
+  - Leave templates: Kept by default
+- **Safety**: Foreign key checks, auto-increment resets, status messages
+- **Verification**: Data counts and admin details displayed after execution
+
+#### Bug Fixes Applied
+
+1. **Center Alignment**: Added `justifyContent: 'center'` to status Box in ApprovalsPage
+2. **Icon Placement**: Moved Info icon from Status column to Actions column for Employee/Manager views
+3. **Consistent Logic**: Same conditional rendering pattern across all three pages
+
+#### Important Notes
+
+- Info icon appears in Actions column alongside Cancel button logic
+- Icon only visible for rejected leaves (not pending, approved, or cancelled)
+- Modal provides complete rejection audit trail
+- No backend changes required - uses existing data structure
+- CleanEnvironment.sql preserves all configuration and business rules
+- Script can be run in MySQL Workbench or command line
+
+---
+
+### Employee Date Fields & Gender-Based Leave Filtering
 
 **Date:** November 5, 2025
 
@@ -1744,6 +1895,35 @@ export class LeaveService {
 
 ## Changelog
 
+### v2.5.0 (November 13, 2025)
+- **NEW:** Rejection Information display feature for all rejected leaves
+- **NEW:** Info icon (ℹ️) in Actions column showing rejection details on click
+- **NEW:** Rejection Details modal with comprehensive rejection audit trail
+- **NEW:** CleanEnvironment.sql script for database cleanup
+- **NEW:** Modal displays: rejected by, rejection date/time, and rejection reason
+- **ENHANCEMENT:** Rejection reason highlighted in pink paper component (#fef0f0 background)
+- **ENHANCEMENT:** Info icon with pink color theme (#f857a6) matching rejection status
+- **ENHANCEMENT:** Consistent rejection info across ApprovalsPage, LeavesPage, and DashboardPage
+- **ENHANCEMENT:** CleanEnvironment.sql preserves all configuration and reference data
+- **ENHANCEMENT:** Smart data access with fallback logic between LeaveRequest and Approval entities
+- **FIX:** Center alignment for status with Info icon in ApprovalsPage
+- **FIX:** Info icon placement moved from Status to Actions column for Employee/Manager views
+- **FIX:** Consistent conditional rendering pattern across all three pages
+- **FEATURE:** CleanEnvironment.sql deletes all transactional data while keeping:
+  - Admin login credentials intact
+  - Department master data
+  - LeaveType configurations
+  - All table structures and relationships
+  - All business logic and enums
+  - Optional: Holiday records (deleted by default, easy to preserve)
+  - Optional: Audit logs (3 flexible options: delete all/keep admin's/keep all)
+  - Optional: Leave templates (kept by default)
+- **SECURITY:** Foreign key safe execution with proper disable/enable
+- **DOCUMENTATION:** Detailed comments and sections in CleanEnvironment.sql
+- **DOCUMENTATION:** Verification queries showing data counts after cleanup
+- Info icon only visible for leaves with status = 'REJECTED'
+- No backend changes required for rejection info feature
+
 ### v2.4.0 (November 6, 2025)
 - **NEW:** Holiday Calendar management system with regional support (IND/US)
 - **NEW:** Admin interface to create, edit, and delete holidays
@@ -1831,5 +2011,5 @@ export class LeaveService {
 
 ---
 
-**Last Updated:** November 6, 2025
-**Version:** 2.4.0
+**Last Updated:** November 13, 2025
+**Version:** 2.5.0
