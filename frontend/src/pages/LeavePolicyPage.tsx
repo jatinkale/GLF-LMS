@@ -402,7 +402,7 @@ export default function LeavePolicyPage() {
       setBulkEmployees(data);
       setSelectedBulkEmployees([]);
       if (data.length === 0) {
-        toast.info('No employees found matching the filters');
+        toast.success('No employees found matching the filters');
       } else {
         toast.success(`Found ${data.length} employee(s)`);
       }
@@ -965,10 +965,10 @@ export default function LeavePolicyPage() {
             <Box sx={{ mb: 3 }}>
               <Autocomplete
                 options={employeeSearchResults || []}
-                getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.employeeId})`}
+                getOptionLabel={(option: EmployeeSearchResult) => `${option.firstName} ${option.lastName} (${option.employeeId})`}
                 inputValue={employeeSearch}
                 onInputChange={(event, newValue) => setEmployeeSearch(newValue)}
-                onChange={(event, newValue) => {
+                onChange={(event, newValue: EmployeeSearchResult | null) => {
                   setSelectedEmployee(newValue);
                   setSpecialLeaveForm({ leaveType: '', action: 'ADD', numberOfLeaves: '', comments: '' });
                 }}
@@ -980,7 +980,7 @@ export default function LeavePolicyPage() {
                     fullWidth
                   />
                 )}
-                renderOption={(props, option) => (
+                renderOption={(props, option: EmployeeSearchResult) => (
                   <li {...props} key={option.employeeId}>
                     <Box>
                       <Typography variant="body1">

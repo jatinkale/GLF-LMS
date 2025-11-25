@@ -786,7 +786,7 @@ export default function DashboardPage() {
               value={approvedCount}
               subtitle={`From Jan ${currentYear} till date`}
               icon={<CheckCircle />}
-              gradientType="green"
+              gradientType="success"
               delay={0.1}
             />
           </Grid>
@@ -1025,7 +1025,7 @@ export default function DashboardPage() {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <GradientButton gradientType="green" startIcon={<Add />} onClick={handleOpenApplyDialog}>
+          <GradientButton gradientType="success" startIcon={<Add />} onClick={handleOpenApplyDialog}>
             Apply Leaves
           </GradientButton>
           <GradientButton gradientType="secondary" startIcon={<Refresh />} onClick={handleRefreshAll}>

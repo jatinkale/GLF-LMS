@@ -236,7 +236,7 @@ export default function ApprovalsPage() {
       if (failCount === 0) {
         toast.success(`${successCount} leave request(s) approved successfully!`);
       } else {
-        toast.warning(`${successCount} approved, ${failCount} failed`);
+        toast.error(`${successCount} approved, ${failCount} failed`);
       }
 
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
@@ -281,7 +281,7 @@ export default function ApprovalsPage() {
       if (failCount === 0) {
         toast.success(`${successCount} leave request(s) rejected successfully!`);
       } else {
-        toast.warning(`${successCount} rejected, ${failCount} failed`);
+        toast.error(`${successCount} rejected, ${failCount} failed`);
       }
 
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
@@ -338,8 +338,8 @@ export default function ApprovalsPage() {
     if (allPendingSelected) {
       setSelectedIds(new Set());
     } else {
-      const allIds = new Set(
-        pendingLeaves.map((leave: any) => leave.id)
+      const allIds = new Set<string>(
+        pendingLeaves.map((leave: any) => leave.id as string)
       );
       setSelectedIds(allIds);
     }

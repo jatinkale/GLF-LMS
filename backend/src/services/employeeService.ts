@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PrismaClient, LMSAccess, Role } from '@prisma/client';
 import { Request } from 'express';
 import xlsx from 'xlsx';

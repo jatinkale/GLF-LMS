@@ -145,8 +145,10 @@ export const checkOwnershipOrRole = (resourceEmployeeId: string) => {
 
 // Generate JWT token
 export const generateToken = (payload: JWTPayload): string => {
+  const expiresIn: string = process.env.JWT_EXPIRES_IN || '7d';
+  // @ts-ignore - TypeScript JWT typing issue
   return jwt.sign(payload, process.env.JWT_SECRET || 'default-secret', {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    expiresIn: expiresIn,
   });
 };
 

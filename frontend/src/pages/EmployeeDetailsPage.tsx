@@ -633,10 +633,10 @@ export default function EmployeeDetailsPage() {
   const employees = employeesData || [];
 
   // Get unique values for filter dropdowns
-  const locations = employees.map((emp: Employee) => emp.location).filter(Boolean);
+  const locations = employees.map((emp: Employee) => emp.location).filter(Boolean) as string[];
   const uniqueLocations = ['All', ...Array.from(new Set(locations)).sort()];
 
-  const managers = employees.map((emp: Employee) => emp.reportingManager).filter(Boolean);
+  const managers = employees.map((emp: Employee) => emp.reportingManager).filter(Boolean) as string[];
   const uniqueReportingManagers = ['All', ...Array.from(new Set(managers)).sort()];
 
   // Apply filters to employees

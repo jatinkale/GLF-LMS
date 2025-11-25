@@ -33,7 +33,9 @@
       "Bash(PORT=5174 npm run dev:*)",
       "Bash(ForEach-Object { $_ -split '\\s+')",
       "Bash(Select-Object -Last 1 })",
-      "Bash(ForEach-Object { taskkill /F /PID $_ })"
+      "Bash(ForEach-Object { taskkill /F /PID $_ })",
+      "Bash(npm run build:*)",
+      "Bash(npx vite build)"
     ],
     "deny": [],
     "ask": []

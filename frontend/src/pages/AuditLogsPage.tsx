@@ -202,7 +202,7 @@ const AuditLogsPage = () => {
       const exportData: AuditLog[] = response.data.data || [];
 
       if (exportData.length === 0) {
-        toast.info('No data to export');
+        toast.success('No data to export');
         return;
       }
 
