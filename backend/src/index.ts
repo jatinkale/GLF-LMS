@@ -23,7 +23,7 @@ import holidayRoutes from './routes/holidays';
 dotenv.config();
 
 const app: Application = express();
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 7772;
 
 // Security middleware
 app.use(helmet());

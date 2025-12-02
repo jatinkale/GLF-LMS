@@ -10,11 +10,11 @@ const getApiUrl = () => {
   // Otherwise, dynamically determine based on how frontend is accessed
   const hostname = window.location.hostname;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3001/api/v1';
+    return 'http://localhost:7772/api/v1';
   }
 
   // Use the current hostname for network access
-  return `http://${hostname}:3001/api/v1`;
+  return `http://${hostname}:7772/api/v1`;
 };
 
 const API_URL = getApiUrl();

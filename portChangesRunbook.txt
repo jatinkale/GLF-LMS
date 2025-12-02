@@ -1,0 +1,161 @@
+================================================================================
+                    PORT CONFIGURATION CHANGE RUNBOOK
+                    LMS v2 - Leave Management System
+================================================================================
+
+Date Created: December 2, 2025
+New Configuration: Backend Port 7772, Frontend Port 7771
+
+================================================================================
+                            COMPLETE CHECKLIST
+================================================================================
+
+BACKEND CHANGES (Port 7772)
+----------------------------
+
+1. backend/.env (Line 2)
+   OLD: PORT=3001
+   NEW: PORT=7772
+
+2. backend/.env (Line 4)
+   OLD: FRONTEND_URL=http://localhost:5174
+   NEW: FRONTEND_URL=http://localhost:7771
+
+3. backend/.env.example (Lines 2, 4)
+   OLD: PORT=3001
+   NEW: PORT=7772
+   OLD: FRONTEND_URL=http://localhost:5174
+   NEW: FRONTEND_URL=http://localhost:7771
+
+4. backend/src/index.ts (Line 26)
+   OLD: const PORT = Number(process.env.PORT) || 3001;
+   NEW: const PORT = Number(process.env.PORT) || 7772;
+
+
+FRONTEND CHANGES (Port 7771)
+-----------------------------
+
+1. frontend/vite.config.ts (Line 9)
+   OLD: port: 5174,
+   NEW: port: 7771,
+
+2. frontend/vite.config.ts (Line 12)
+   OLD: target: 'http://localhost:3001',
+   NEW: target: 'http://localhost:7772',
+
+3. frontend/src/config/api.ts (Line 13)
+   OLD: return 'http://localhost:3001/api/v1';
+   NEW: return 'http://localhost:7772/api/v1';
+
+4. frontend/src/config/api.ts (Line 17)
+   OLD: return `http://${hostname}:3001/api/v1`;
+   NEW: return `http://${hostname}:7772/api/v1`;
+
+5. frontend/.env (Line 1)
+   OLD: VITE_API_URL=http://localhost:3001/api/v1
+   NEW: VITE_API_URL=http://localhost:7772/api/v1
+
+
+================================================================================
+                            QUICK REFERENCE
+================================================================================
+
+Total Files to Edit: 7
+
+Backend Files (4):
+  - backend/.env
+  - backend/.env.example
+  - backend/src/index.ts
+
+Frontend Files (4):
+  - frontend/vite.config.ts
+  - frontend/src/config/api.ts
+  - frontend/.env
+
+
+================================================================================
+                        AFTER MAKING CHANGES
+================================================================================
+
+1. Stop any running servers:
+   - Kill existing backend and frontend processes
+
+2. Start Backend:
+   cd backend
+   npm run dev
+
+3. Start Frontend:
+   cd frontend
+   npm run dev
+
+4. Verify:
+   - Frontend accessible at: http://localhost:7771/
+   - Backend API at: http://localhost:7772/api/v1
+   - Health check: http://localhost:7772/health
+
+
+================================================================================
+                        ACCESS INFORMATION
+================================================================================
+
+Frontend URLs:
+  Local:   http://localhost:7771/
+  Network: http://<your-ip>:7771/
+
+Backend URLs:
+  API:          http://localhost:7772/api/v1
+  Health Check: http://localhost:7772/health
+  Network API:  http://<your-ip>:7772/api/v1
+
+
+================================================================================
+                        ROLLBACK PROCEDURE
+================================================================================
+
+To revert back to original ports (Backend: 3001, Frontend: 5174):
+
+1. Change all instances of 7772 back to 3001
+2. Change all instances of 7771 back to 5174
+3. Restart both servers
+
+
+================================================================================
+                        TROUBLESHOOTING
+================================================================================
+
+Issue: Port already in use
+Solution (Windows):
+  netstat -ano | findstr :7771
+  netstat -ano | findstr :7772
+  taskkill /F /PID <PID>
+
+Solution (Linux/Mac):
+  lsof -ti:7771 | xargs kill -9
+  lsof -ti:7772 | xargs kill -9
+
+Issue: CORS errors
+Solution:
+  - Verify FRONTEND_URL in backend/.env matches frontend port
+  - Restart backend server after changing .env
+
+Issue: API calls failing
+Solution:
+  - Check frontend/.env VITE_API_URL points to correct backend port
+  - Clear browser cache and reload
+  - Restart frontend dev server
+
+
+================================================================================
+                        NOTES
+================================================================================
+
+- The frontend api.ts file uses environment variables first, then falls back
+  to hardcoded values
+- Always restart servers after changing port configurations
+- Browser cache may need clearing after port changes
+- Network access requires firewall rules to allow the new ports
+
+
+================================================================================
+                        END OF RUNBOOK
+================================================================================
