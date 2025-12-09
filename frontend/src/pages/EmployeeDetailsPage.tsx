@@ -125,6 +125,8 @@ export default function EmployeeDetailsPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([]);
+  const [selectionCount, setSelectionCount] = useState(0);
+  const [dataGridKey, setDataGridKey] = useState(0);
   const [lmsUserRole, setLmsUserRole] = useState<'EMPLOYEE' | 'MANAGER'>('EMPLOYEE');
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'reset' | 'toggle' | 'delete' | null>(null);
@@ -219,7 +221,10 @@ export default function EmployeeDetailsPage() {
     },
     onSuccess: (data) => {
       toast.success(data.message);
+      // Reset selection
       setSelectedRows([]);
+      setSelectionCount(0);
+      setDataGridKey(prev => prev + 1); // Force DataGrid remount to clear selection
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
     onError: (error: any) => {
@@ -308,15 +313,30 @@ export default function EmployeeDetailsPage() {
   });
 
   const handleCreateLMSUsers = () => {
-    console.log('Button clicked! Selected rows:', selectedRows);
-
     // Extract IDs from the selection model
     let employeeIds: string[] = [];
+
     if (Array.isArray(selectedRows)) {
       employeeIds = selectedRows.map(id => String(id));
     } else if (selectedRows && typeof selectedRows === 'object' && 'ids' in selectedRows) {
-      // Handle the {type: 'include', ids: Set(...)} structure
-      employeeIds = Array.from(selectedRows.ids as Set<any>).map(id => String(id));
+      const selectionObj = selectedRows as any;
+      const ids = selectionObj.ids;
+
+      // Handle 'exclude' type (Select All scenario)
+      if (selectionObj.type === 'exclude') {
+        // Get all employee IDs except those in the exclusion set
+        const excludedIds = ids instanceof Set ? ids : new Set(Object.keys(ids || {}));
+        employeeIds = filteredEmployees
+          .filter(emp => !excludedIds.has(emp.employeeId))
+          .map(emp => emp.employeeId);
+      } else {
+        // Handle 'include' type - extract IDs from the Set
+        if (ids instanceof Set) {
+          employeeIds = Array.from(ids).map(id => String(id));
+        } else if (typeof ids === 'object') {
+          employeeIds = Object.keys(ids).map(id => String(id));
+        }
+      }
     }
 
     if (employeeIds.length === 0) {
@@ -324,7 +344,6 @@ export default function EmployeeDetailsPage() {
       return;
     }
 
-    console.log('Creating LMS users for:', employeeIds);
     createLMSUsersMutation.mutate(employeeIds);
   };
 
@@ -957,12 +976,7 @@ export default function EmployeeDetailsPage() {
             variant="contained"
             startIcon={<GroupAddIcon />}
             onClick={handleCreateLMSUsers}
-            disabled={
-              (Array.isArray(selectedRows)
-                ? selectedRows.length === 0
-                : !selectedRows || !selectedRows.ids || selectedRows.ids.size === 0)
-              || createLMSUsersMutation.isPending
-            }
+            disabled={selectionCount === 0 || createLMSUsersMutation.isPending}
             sx={{
               bgcolor: '#f57c00 !important',
               background: '#f57c00 !important',
@@ -986,16 +1000,12 @@ export default function EmployeeDetailsPage() {
           >
             {createLMSUsersMutation.isPending
               ? 'Creating...'
-              : (() => {
-                  const count = Array.isArray(selectedRows)
-                    ? selectedRows.length
-                    : selectedRows?.ids?.size || 0;
-                  return `Create/Update LMS Logins${count > 0 ? ` (${count})` : ''}`;
-                })()
+              : `Create/Update LMS Logins${selectionCount > 0 ? ` (${selectionCount})` : ''}`
             }
           </Button>
         </Box>
         <DataGrid
+          key={dataGridKey}
           rows={filteredEmployees}
           columns={columns}
           getRowId={(row) => row.employeeId}
@@ -1008,8 +1018,27 @@ export default function EmployeeDetailsPage() {
           checkboxSelection
           disableColumnFilter
           onRowSelectionModelChange={(newSelection) => {
-            console.log('Selection changed:', newSelection);
             setSelectedRows(newSelection);
+
+            // Calculate count from the selection
+            let count = 0;
+            if (Array.isArray(newSelection)) {
+              count = newSelection.length;
+            } else if (newSelection && typeof newSelection === 'object' && 'ids' in newSelection) {
+              const selectionObj = newSelection as any;
+              const ids = selectionObj.ids;
+              const idsCount = ids instanceof Set ? ids.size : Object.keys(ids || {}).length;
+
+              // Handle 'exclude' type (Select All scenario)
+              if (selectionObj.type === 'exclude') {
+                // 'exclude' with empty Set means ALL rows are selected
+                count = filteredEmployees.length - idsCount;
+              } else {
+                // 'include' type - just use the Set size
+                count = idsCount;
+              }
+            }
+            setSelectionCount(count);
           }}
           disableRowSelectionOnClick
           autoHeight

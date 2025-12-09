@@ -664,20 +664,12 @@ export class EmployeeService {
         // Map location to region
         const region = this.mapLocationToRegion(employee.location);
 
-        // Check if reporting manager has LMS user account
-        let managerEmployeeId: string | null = null;
-        if (employee.reportingManagerId) {
-          const managerHasLmsUser = await prisma.user.findUnique({
-            where: { employeeId: employee.reportingManagerId },
-            select: { employeeId: true }
-          });
-          if (managerHasLmsUser) {
-            managerEmployeeId = employee.reportingManagerId;
-          }
-        }
+        // Note: managerEmployeeId will be set in the sync step after all users are created
+        // This avoids foreign key constraint errors when managers are in the same batch
 
         if (existingUser) {
           // Update existing user (including password reset to default and region)
+          // Don't update managerEmployeeId here - will be synced after all users exist
           const updatedUser = await prisma.user.update({
             where: { email: employee.email },
             data: {
@@ -690,7 +682,6 @@ export class EmployeeService {
               designation: employee.designation,
               employeeId: employee.employeeId,
               phoneNumber: employee.phoneNumber,
-              managerEmployeeId: managerEmployeeId,
               region: region,
             }
           });
@@ -708,6 +699,7 @@ export class EmployeeService {
           results.updated++;
         } else {
           // Create new user
+          // Note: managerEmployeeId is set to null initially, will be synced after all users are created
           const newUser = await prisma.user.create({
             data: {
               email: employee.email,
@@ -724,7 +716,7 @@ export class EmployeeService {
               region: region,
               isActive: employee.isActive,
               emailVerified: false,
-              managerEmployeeId: managerEmployeeId,
+              managerEmployeeId: null,  // Will be set in sync step after all users exist
             }
           });
 
@@ -776,6 +768,40 @@ export class EmployeeService {
         results.errors.push(`Employee ${employeeId}: ${error.message}`);
         results.success = false;
       }
+    }
+
+    // After creating/updating all users, sync manager relationships
+    // Only set managerEmployeeId if the manager has an LMS account (foreign key constraint)
+    try {
+      // Get all existing LMS users
+      const allUsers = await prisma.user.findMany({
+        select: { employeeId: true }
+      });
+      const userEmployeeIds = new Set(allUsers.map(u => u.employeeId));
+
+      // Get employees with reporting managers
+      const employees = await prisma.employee.findMany({
+        where: {
+          employeeId: { in: employeeIds },
+          reportingManagerId: { not: null }
+        },
+        select: {
+          employeeId: true,
+          reportingManagerId: true
+        }
+      });
+
+      // Update manager relationships only if manager exists in User table
+      for (const emp of employees) {
+        if (emp.reportingManagerId && userEmployeeIds.has(emp.reportingManagerId)) {
+          await prisma.user.update({
+            where: { employeeId: emp.employeeId },
+            data: { managerEmployeeId: emp.reportingManagerId }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing manager relationships:', error);
     }
 
     return results;

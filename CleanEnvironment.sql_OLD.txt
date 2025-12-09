@@ -104,6 +104,10 @@ DELETE FROM delegations
 WHERE delegatorEmployeeId != 'ADMIN001'
   AND delegateEmployeeId != 'ADMIN001';
 
+-- Delete Holidays
+DELETE FROM holidays
+WHERE location = 'IND' OR location = 'US'
+
 -- ================================================================================
 -- STEP 4: Delete leave process history (no direct user FK, but good to clean)
 -- ================================================================================
