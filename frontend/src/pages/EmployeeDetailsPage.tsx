@@ -22,6 +22,7 @@ import {
   Select,
   Switch,
   FormControlLabel,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -130,6 +131,8 @@ export default function EmployeeDetailsPage() {
   const [lmsUserRole, setLmsUserRole] = useState<'EMPLOYEE' | 'MANAGER'>('EMPLOYEE');
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'reset' | 'toggle' | 'delete' | null>(null);
+  const [openEditEmployeeIdModal, setOpenEditEmployeeIdModal] = useState(false);
+  const [newEmployeeIdValue, setNewEmployeeIdValue] = useState('');
 
   // Filter states
   const [searchText, setSearchText] = useState('');
@@ -180,6 +183,26 @@ export default function EmployeeDetailsPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to update employee');
+    },
+  });
+
+  // Update employee ID mutation
+  const updateEmployeeIdMutation = useMutation({
+    mutationFn: async ({ oldEmployeeId, newEmployeeId }: { oldEmployeeId: string; newEmployeeId: string }) => {
+      const response = await api.put(`/employees/${oldEmployeeId}/update-employee-id`, { newEmployeeId });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setOpenEditEmployeeIdModal(false);
+      setNewEmployeeIdValue('');
+      // Update the form data with new employee ID
+      setFormData(prev => ({ ...prev, employeeId: data.data.newEmployeeId }));
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update employee ID');
     },
   });
 
@@ -1270,6 +1293,29 @@ export default function EmployeeDetailsPage() {
                 disabled
                 label="Employee ID"
                 value={formData.employeeId}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Edit Employee ID">
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setNewEmployeeIdValue(formData.employeeId);
+                            setOpenEditEmployeeIdModal(true);
+                          }}
+                          sx={{
+                            color: '#11998e',
+                            '&:hover': {
+                              backgroundColor: 'rgba(17, 153, 142, 0.08)',
+                            },
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1442,6 +1488,100 @@ export default function EmployeeDetailsPage() {
             disabled={updateMutation.isPending}
           >
             {updateMutation.isPending ? 'Updating...' : 'Update Employee'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Employee ID Modal */}
+      <Dialog
+        open={openEditEmployeeIdModal}
+        onClose={() => setOpenEditEmployeeIdModal(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1, fontSize: '1.5rem', fontWeight: 600 }}>
+          Edit Employee ID
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <Typography variant="body2">
+                <strong>Warning:</strong> Changing the Employee ID will cascade the update across all related records in the database. This action cannot be undone.
+              </Typography>
+            </Alert>
+
+            <TextField
+              fullWidth
+              disabled
+              label="Current Employee ID"
+              value={formData.employeeId}
+              sx={{ mb: 2 }}
+            />
+
+            <TextField
+              fullWidth
+              required
+              label="New Employee ID"
+              value={newEmployeeIdValue}
+              onChange={(e) => setNewEmployeeIdValue(e.target.value)}
+              placeholder="Enter new employee ID"
+              autoFocus
+              helperText="Enter the new employee ID. Make sure it's unique and doesn't already exist."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => {
+              setOpenEditEmployeeIdModal(false);
+              setNewEmployeeIdValue('');
+            }}
+            disabled={updateEmployeeIdMutation.isPending}
+            sx={{
+              color: '#fff !important',
+              backgroundColor: '#f857a6 !important',
+              backgroundImage: 'none !important',
+              '&:hover': {
+                backgroundColor: '#c62828 !important',
+                backgroundImage: 'none !important',
+              },
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (!newEmployeeIdValue || newEmployeeIdValue.trim() === '') {
+                toast.error('Please enter a new employee ID');
+                return;
+              }
+              if (newEmployeeIdValue.trim() === formData.employeeId) {
+                toast.error('New employee ID must be different from the current ID');
+                return;
+              }
+              updateEmployeeIdMutation.mutate({
+                oldEmployeeId: formData.employeeId,
+                newEmployeeId: newEmployeeIdValue.trim(),
+              });
+            }}
+            disabled={updateEmployeeIdMutation.isPending}
+            sx={{
+              color: '#fff !important',
+              backgroundColor: '#11998e !important',
+              backgroundImage: 'none !important',
+              '&:hover': {
+                backgroundColor: '#00695c !important',
+                backgroundImage: 'none !important',
+              },
+              '&:disabled': {
+                backgroundColor: 'rgba(0, 0, 0, 0.12) !important',
+                color: 'rgba(0, 0, 0, 0.26) !important',
+                backgroundImage: 'none !important',
+              },
+            }}
+          >
+            {updateEmployeeIdMutation.isPending ? 'Updating...' : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>

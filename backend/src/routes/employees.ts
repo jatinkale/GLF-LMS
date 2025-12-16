@@ -354,4 +354,66 @@ router.post('/create-lms-users', async (req: Request, res: Response) => {
   }
 });
 
+// Update Employee ID (cascades to all tables)
+router.put('/:oldId/update-employee-id', async (req: Request, res: Response) => {
+  try {
+    const { oldId } = req.params;
+    const { newEmployeeId } = req.body;
+
+    // Validation
+    if (!newEmployeeId || newEmployeeId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'New Employee ID is required'
+      });
+    }
+
+    const trimmedNewId = newEmployeeId.trim();
+
+    // Check if old and new are the same
+    if (oldId === trimmedNewId) {
+      return res.status(400).json({
+        success: false,
+        message: 'New Employee ID must be different from the current ID'
+      });
+    }
+
+    const result = await employeeService.updateEmployeeId(
+      oldId,
+      trimmedNewId,
+      req.user!.employeeId,
+      req
+    );
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: {
+        oldEmployeeId: oldId,
+        newEmployeeId: trimmedNewId
+      }
+    });
+  } catch (error: any) {
+    console.error('Error updating employee ID:', error);
+
+    // Handle specific error messages
+    if (error.message.includes('not found')) {
+      res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    } else if (error.message.includes('already exists')) {
+      res.status(409).json({
+        success: false,
+        message: error.message
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to update Employee ID'
+      });
+    }
+  }
+});
+
 export default router;

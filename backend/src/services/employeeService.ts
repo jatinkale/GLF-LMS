@@ -806,6 +806,154 @@ export class EmployeeService {
 
     return results;
   }
+
+  // Update Employee ID (cascades to all related tables)
+  async updateEmployeeId(
+    oldEmployeeId: string,
+    newEmployeeId: string,
+    performedBy: string,
+    req?: Request
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      // Validation: Check if old employee exists
+      const oldEmployee = await prisma.employee.findUnique({
+        where: { employeeId: oldEmployeeId }
+      });
+
+      if (!oldEmployee) {
+        throw new Error(`Employee with ID ${oldEmployeeId} not found`);
+      }
+
+      // Validation: Check if new ID already exists in Employee table
+      const existingEmployee = await prisma.employee.findUnique({
+        where: { employeeId: newEmployeeId }
+      });
+
+      if (existingEmployee) {
+        throw new Error(`Employee ID ${newEmployeeId} already exists`);
+      }
+
+      // Validation: Check if new ID already exists in User table
+      const existingUser = await prisma.user.findUnique({
+        where: { employeeId: newEmployeeId }
+      });
+
+      if (existingUser) {
+        throw new Error(`Employee ID ${newEmployeeId} already exists in User table`);
+      }
+
+      // Check if LMS user exists for this employee
+      const lmsUser = await prisma.user.findUnique({
+        where: { employeeId: oldEmployeeId }
+      });
+
+      // Execute all updates in a transaction using raw SQL
+      // Note: Prisma doesn't support updating primary keys (@id fields),
+      // so we must use raw SQL to update employeeId in Employee and User tables
+      await prisma.$transaction(async (tx) => {
+        // Temporarily disable foreign key checks for this transaction (MySQL specific)
+        // This allows us to update primary keys that are referenced by foreign keys
+        await tx.$executeRaw`SET FOREIGN_KEY_CHECKS = 0`;
+
+        // Step 1: Update Employee table (PRIMARY KEY)
+        await tx.$executeRaw`UPDATE employees SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+        // Only update User and related tables if LMS user exists
+        if (lmsUser) {
+          // Step 2: Update User's manager references (foreign key)
+          await tx.$executeRaw`UPDATE users SET managerEmployeeId = ${newEmployeeId} WHERE managerEmployeeId = ${oldEmployeeId}`;
+
+          // Step 3: Update LeaveBalance (foreign key)
+          await tx.$executeRaw`UPDATE leave_balances SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 4: Update LeaveRequest (foreign key)
+          await tx.$executeRaw`UPDATE leave_requests SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 5: Update Approval (foreign key)
+          await tx.$executeRaw`UPDATE approvals SET approverEmployeeId = ${newEmployeeId} WHERE approverEmployeeId = ${oldEmployeeId}`;
+
+          // Step 6: Update CompOffRequest (foreign key)
+          await tx.$executeRaw`UPDATE comp_off_requests SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 7: Update CompOffBalance (foreign key)
+          await tx.$executeRaw`UPDATE comp_off_balances SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 8: Update MonthlyAccrual (foreign key)
+          await tx.$executeRaw`UPDATE monthly_accruals SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 9: Update Notification (foreign key)
+          await tx.$executeRaw`UPDATE notifications SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 10: Update AuditLog (employeeId field)
+          await tx.$executeRaw`UPDATE audit_logs SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+
+          // Step 11: Update Delegation (delegatorEmployeeId foreign key)
+          await tx.$executeRaw`UPDATE delegations SET delegatorEmployeeId = ${newEmployeeId} WHERE delegatorEmployeeId = ${oldEmployeeId}`;
+
+          // Step 12: Update Delegation (delegateEmployeeId foreign key)
+          await tx.$executeRaw`UPDATE delegations SET delegateEmployeeId = ${newEmployeeId} WHERE delegateEmployeeId = ${oldEmployeeId}`;
+
+          // Step 13: Update NotificationPreference (PRIMARY KEY) using delete + create
+          const notifPref = await tx.notificationPreference.findUnique({
+            where: { employeeId: oldEmployeeId }
+          });
+
+          if (notifPref) {
+            await tx.notificationPreference.delete({
+              where: { employeeId: oldEmployeeId }
+            });
+            await tx.notificationPreference.create({
+              data: {
+                employeeId: newEmployeeId,
+                emailEnabled: notifPref.emailEnabled,
+                inAppEnabled: notifPref.inAppEnabled,
+                leaveRequestNotif: notifPref.leaveRequestNotif,
+                leaveApprovalNotif: notifPref.leaveApprovalNotif,
+                leaveRejectionNotif: notifPref.leaveRejectionNotif,
+                leaveCancellationNotif: notifPref.leaveCancellationNotif,
+                balanceLowNotif: notifPref.balanceLowNotif,
+                accrualCreditNotif: notifPref.accrualCreditNotif,
+                delegationNotif: notifPref.delegationNotif,
+                reminderNotif: notifPref.reminderNotif
+              }
+            });
+          }
+
+          // Step 14: Finally update the User table (PRIMARY KEY)
+          await tx.$executeRaw`UPDATE users SET employeeId = ${newEmployeeId} WHERE employeeId = ${oldEmployeeId}`;
+        }
+
+        // Re-enable foreign key checks before creating audit log
+        await tx.$executeRaw`SET FOREIGN_KEY_CHECKS = 1`;
+
+        // Step 15: Create audit log for this change
+        await tx.auditLog.create({
+          data: {
+            action: 'EMPLOYEE_ID_CHANGED',
+            entity: 'EMPLOYEE',
+            entityId: newEmployeeId,
+            employeeId: performedBy,
+            description: JSON.stringify({
+              oldEmployeeId,
+              newEmployeeId,
+              hadLMSUser: !!lmsUser,
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: req?.ip || 'Unknown',
+            userAgent: req?.get('user-agent') || 'Unknown'
+          }
+        });
+      });
+
+      return {
+        success: true,
+        message: `Employee ID successfully changed from ${oldEmployeeId} to ${newEmployeeId}`
+      };
+    } catch (error: any) {
+      console.error('Error updating employee ID:', error);
+      throw new Error(error.message || 'Failed to update employee ID');
+    }
+  }
 }
 
 export default new EmployeeService();
